@@ -2,13 +2,13 @@
 
 ## Scope
 
-This checkpoint adds an optimization layer on top of the Phase 4 baseline scoring mart. PuLP/CBC is now installed and used as the MILP backend for the smoke candidate set.
+This checkpoint adds a real optimization layer on top of the Phase 4 baseline scoring mart. PuLP/CBC is used as the MILP backend for the current four-country tile-smoke candidate set covering Belgium, Germany, France, and the Netherlands.
 
-This is a smoke-scope MILP checkpoint, not the final full-pilot MILP gate.
+This is still a public-proxy decision-support layer, not an investment-grade site-selection model. It does not model grid capacity, permit feasibility, land control, traffic flows, negotiated CAPEX, or charger-level utilization.
 
-## Model Type
+## Model Types
 
-The business problem is a maximal covering location problem:
+The first formulation is a maximal covering location problem:
 
 ```text
 Select candidate sites to maximize unique covered demand weight
@@ -18,19 +18,29 @@ subject to:
   candidate-zone coverage is defined by a_ij
 ```
 
+The second formulation is a min-cost coverage-floor problem:
+
+```text
+Select candidate sites to minimize total candidate cost
+subject to:
+  covered demand weight >= coverage floor
+  selected candidate count <= k
+  selected candidate cost <= budget
+```
+
 Current method IDs:
 
 | Method | Meaning |
 |---|---|
 | `method:baseline-topk` | Benchmark: take top baseline-ranked candidates within `k` and budget. |
-| `method:mclp-shortlist-exact` | Exact maximal coverage search over the top baseline shortlist as an audit benchmark. |
-| `method:mclp-pulp-cbc` | PuLP/CBC MILP over all current smoke/batch candidates. |
-
-The shortlisted exact search currently uses the top 18 baseline candidates per radius scenario. The PuLP/CBC method uses all 1,973 current smoke/batch candidates.
+| `method:mclp-shortlist-exact` | Exact maximal coverage search over the top 18 baseline candidates as an audit benchmark. |
+| `method:mclp-pulp-cbc` | PuLP/CBC maximal coverage MILP over all 1,973 current smoke/batch candidates. |
+| `method:min-cost-coverage-pulp` | PuLP/CBC min-cost model with a coverage floor set at 90% of the baseline top-k covered demand. |
+| `method:mclp-weighted-shortlist-pulp-cbc` | Sensitivity MILP over the top 80 candidates from each baseline weight-set ranking. |
 
 ## Cost Assumptions
 
-Candidate cost `c_j` now uses a proxy model instead of a single flat value:
+Candidate cost `c_j` uses a proxy model instead of a single flat value:
 
 ```text
 c_j = site_type_base_cost
@@ -53,59 +63,62 @@ These are still assumptions. They make the budget constraint more realistic than
 
 | Output | Rows | Grain |
 |---|---:|---|
-| `mart_optimization_results_tile_smoke.csv` | 9 | One row per scenario and method. |
-| `mart_optimization_constraint_diagnostics_tile_smoke.csv` | 36 | One constraint diagnostic per scenario, method, and constraint. |
-| `fact_optimization_selected_sites_tile_smoke.csv` | 63 | One selected candidate per scenario and method. |
+| `mart_optimization_results_tile_smoke.csv` | 12 | One row per scenario and method. |
+| `mart_optimization_constraint_diagnostics_tile_smoke.csv` | 60 | One constraint diagnostic per scenario, method, and constraint. |
+| `fact_optimization_selected_sites_tile_smoke.csv` | 66 | One selected candidate per scenario and method. |
+| `mart_optimization_sensitivity_tile_smoke.csv` | 15 | One optimization sensitivity row per scenario and baseline weight set. |
 
 ## Current Results
 
-| Scenario | Method | Selected candidates | Covered demand weight | Note |
-|---|---|---:|---:|---|
-| `scenario:radius-conservative` | `method:baseline-topk` | 10 | 6,900,499 | Benchmark top-k. |
-| `scenario:radius-conservative` | `method:mclp-shortlist-exact` | 1 | 6,900,499 | Same coverage with fewer non-incremental selections. |
-| `scenario:radius-conservative` | `method:mclp-pulp-cbc` | 10 | 18,287,940 | MILP improves unique covered demand within constraints. |
-| `scenario:radius-base` | `method:baseline-topk` | 10 | 8,197,709 | Benchmark top-k. |
-| `scenario:radius-base` | `method:mclp-shortlist-exact` | 1 | 8,197,709 | Same coverage with fewer non-incremental selections. |
-| `scenario:radius-base` | `method:mclp-pulp-cbc` | 10 | 27,652,281 | MILP improves unique covered demand within constraints. |
-| `scenario:radius-aggressive` | `method:baseline-topk` | 10 | 12,549,288 | Benchmark top-k. |
-| `scenario:radius-aggressive` | `method:mclp-shortlist-exact` | 1 | 12,549,288 | Same coverage with fewer non-incremental selections. |
-| `scenario:radius-aggressive` | `method:mclp-pulp-cbc` | 10 | 41,225,528 | MILP improves unique covered demand within constraints. |
+| Scenario | Method | Selected | Covered demand | Cost proxy | Coverage uplift | Cost saving |
+|---|---|---:|---:|---:|---:|---:|
+| `scenario:radius-conservative` | `method:baseline-topk` | 10 | 6,900,499 | 5,540,000 | 0.0% | 0.0% |
+| `scenario:radius-conservative` | `method:mclp-shortlist-exact` | 1 | 6,900,499 | 550,000 | 0.0% | 90.1% |
+| `scenario:radius-conservative` | `method:mclp-pulp-cbc` | 10 | 18,287,940 | 5,680,000 | 165.0% | -2.5% |
+| `scenario:radius-conservative` | `method:min-cost-coverage-pulp` | 1 | 6,900,499 | 550,000 | 0.0% | 90.1% |
+| `scenario:radius-base` | `method:baseline-topk` | 10 | 8,197,709 | 5,570,000 | 0.0% | 0.0% |
+| `scenario:radius-base` | `method:mclp-shortlist-exact` | 1 | 8,197,709 | 550,000 | 0.0% | 90.1% |
+| `scenario:radius-base` | `method:mclp-pulp-cbc` | 10 | 27,652,281 | 5,920,000 | 237.3% | -6.3% |
+| `scenario:radius-base` | `method:min-cost-coverage-pulp` | 1 | 8,197,709 | 550,000 | 0.0% | 90.1% |
+| `scenario:radius-aggressive` | `method:baseline-topk` | 10 | 12,549,288 | 5,530,000 | 0.0% | 0.0% |
+| `scenario:radius-aggressive` | `method:mclp-shortlist-exact` | 1 | 12,549,288 | 550,000 | 0.0% | 90.1% |
+| `scenario:radius-aggressive` | `method:mclp-pulp-cbc` | 10 | 41,225,528 | 5,900,000 | 228.5% | -6.7% |
+| `scenario:radius-aggressive` | `method:min-cost-coverage-pulp` | 1 | 12,549,288 | 550,000 | 0.0% | 90.1% |
+
+## Sensitivity Readout
+
+The optimization sensitivity mart reruns MCLP over candidate pools generated by five baseline weight sets. It is deliberately lighter than the full MILP: each run uses the top 80 candidates under that weight set, so it is suitable for Streamlit Cloud and quick portfolio demos.
+
+| Scenario | Objective delta range vs base weight set | Solution overlap range vs base |
+|---|---:|---:|
+| `scenario:radius-conservative` | -8.2% to 8.5% | 30.0% to 100.0% |
+| `scenario:radius-base` | -11.4% to 5.8% | 42.9% to 100.0% |
+| `scenario:radius-aggressive` | 0.0% to 25.2% | 20.0% to 100.0% |
+
+This is useful because it separates two questions: whether the objective value is stable, and whether the actual selected candidates are stable. Some scenarios hold similar covered-demand values while swapping a large share of selected candidate proxies.
 
 ## Interpretation
 
-The current smoke/batch candidate set is still concentrated in selected tiles. In the French smoke tile, multiple fuel POI candidates cover the same NUTS3 demand zones. The exact MCLP shortlist search therefore finds that one candidate can match the unique coverage delivered by ten baseline-ranked candidates.
+The current smoke/batch candidate set is still concentrated in selected tiles. In several radius scenarios, one candidate can match the unique coverage delivered by ten baseline-ranked candidates because nearby baseline candidates cover overlapping NUTS3 zones. The min-cost formulation makes that redundancy visible by reaching the 90% coverage floor with one low-cost candidate in the current smoke set.
 
-The PuLP/CBC MILP uses the full current smoke/batch candidate set instead of only the baseline shortlist. It selects up to `k=10` candidates when additional sites add unique covered demand under the current radius and cross-border rules; in the aggressive radius scenario, the current capped batch set uses the full `k=10` site count.
+The full PuLP/CBC maximal coverage method uses all 1,973 current smoke/batch candidates. It finds materially higher unique covered demand than baseline top-k, but it can cost slightly more than the baseline proxy selection because it optimizes coverage first under the budget and `k` constraints.
 
-This is not a recommendation to select one real site. It is a useful diagnostic:
+This is not a recommendation to select one real site. It is a diagnostic that proves the pipeline can move from BI ranking into optimization, compare objectives, and report constraint health transparently.
 
-- The optimization layer is using unique covered demand, not summed duplicate coverage.
-- The baseline can over-rank redundant nearby candidates.
-- The MILP backend can find materially higher unique coverage than baseline top-k on the current smoke set.
-- Full pilot extraction is required before interpreting selected-site geography.
-
-## Power BI Readiness
+## Power BI and App Readiness
 
 Power BI exports now include:
 
 - `mart_optimization_results_tile_smoke.csv`
+- `mart_optimization_sensitivity_tile_smoke.csv`
 - `mart_optimization_constraint_diagnostics_tile_smoke.csv`
 - `fact_optimization_selected_sites_tile_smoke.csv`
-- Relationship links from optimization outputs to `dim_scenario`, `dim_candidate_site_tile_smoke`, and the `scenario_method_id` summary grain.
 
-Useful BI views:
-
-- Baseline top-k versus MCLP shortlist exact versus PuLP/CBC MILP.
-- Covered demand by scenario and method.
-- Selected candidate count versus covered demand.
-- Constraint status by scenario and method.
-- Redundant candidate signal by scenario.
+The Streamlit app now has an Optimization tab backed by local marts when available and lightweight `app_data/` CSVs for public demo deployment.
 
 ## Gate Status
 
-Phase 5 smoke-scope MILP checkpoint passes as an MVP.
-
-Constraint diagnostics now pass for every current scenario-method output:
+Phase 5 smoke-scope MILP checkpoint passes as an MVP. Constraint diagnostics pass for every current scenario-method output:
 
 | Diagnostic | Scope |
 |---|---|
@@ -113,9 +126,11 @@ Constraint diagnostics now pass for every current scenario-method output:
 | `site_count` | Selected candidate count stays within `k`. |
 | `solver_status` | Solver or benchmark status is accepted as feasible for this checkpoint. |
 | `objective_nonnegative` | Covered-demand objective is nonnegative. |
+| `coverage_floor` | Min-cost and benchmark rows meet their encoded coverage floor. |
 
 Full Phase 5 remains open until:
 
-- Full pilot OSM extraction replaces the smoke candidate set.
+- Full pilot OSM extraction replaces the tile-smoke candidate set.
 - Candidate costs are calibrated with stronger external evidence or a finance model.
+- Grid-capacity, permit, land, and traffic proxies are added or explicitly ruled out.
 - Feasibility diagnostics are rerun and reviewed on the full pilot candidate universe.

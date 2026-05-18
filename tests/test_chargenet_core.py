@@ -9,9 +9,10 @@ from unittest.mock import patch
 
 from chargenet.ids import candidate_site_id, demand_zone_id, osm_object_id, scenario_id
 from chargenet.baseline import SENSITIVITY_WEIGHT_SETS, action_bucket, build_baseline_sensitivity_tile_smoke, clamp, compute_weighted_score, validate_weight_set
+from chargenet.dq import diagnostics_values_match_summary
 from chargenet.osm_clean import element_coordinate, infer_candidate_site_type
 from chargenet.cli import build_parser, main, parse_csv_arg
-from chargenet.optimization import constraint_diagnostics_rows, coverage_objective, solve_mclp_exact, solve_mclp_pulp
+from chargenet.optimization import MIN_COST_METHOD_ID, SENSITIVITY_MCLP_METHOD_ID, build_optimization_results_tile_smoke, build_optimization_sensitivity_tile_smoke, constraint_diagnostics_rows, coverage_objective, solve_mclp_exact, solve_mclp_pulp, solve_min_cost_coverage_pulp
 from chargenet.osm_extract import build_overpass_query, osm_fetch_gate_summary, osm_tile_progress_summary, parse_osm_filter, read_fetched_tile_job_ids, rebuild_osm_tile_execution_log_all, select_batch_jobs, select_jobs, write_log
 from chargenet.pilot import geometry_bbox_midpoint, iter_lon_lat_pairs, load_eurostat_population_by_geo
 from chargenet.scenarios import estimate_candidate_capex
@@ -113,6 +114,10 @@ class ChargeNetCoreTests(unittest.TestCase):
     def test_osm_batch_cli_default_is_triplet_friendly(self) -> None:
         args = build_parser().parse_args(["run-osm-tile-batch"])
         self.assertEqual(args.max_jobs, 9)
+
+    def test_optimization_sensitivity_cli_exists(self) -> None:
+        args = build_parser().parse_args(["build-optimization-sensitivity-tile-smoke"])
+        self.assertEqual(args.command, "build-optimization-sensitivity-tile-smoke")
 
     def test_osm_fetch_only_cli_flags_do_not_require_quality_report(self) -> None:
         batch_args = build_parser().parse_args(["run-osm-tile-batch", "--skip-quality-report"])
@@ -312,6 +317,178 @@ class ChargeNetCoreTests(unittest.TestCase):
         self.assertEqual(result["selected_candidate_ids"], ["candidate:a", "candidate:b"])
         self.assertEqual(result["objective_covered_demand_weight"], 40.0)
 
+    def test_min_cost_coverage_solver_reaches_floor_at_lowest_cost(self) -> None:
+        coverage_by_candidate = {
+            "candidate:a": {"zone:1": 10.0, "zone:2": 10.0},
+            "candidate:b": {"zone:2": 10.0, "zone:3": 10.0},
+            "candidate:c": {"zone:1": 10.0, "zone:2": 10.0, "zone:3": 10.0},
+        }
+        result = solve_min_cost_coverage_pulp(
+            ["candidate:a", "candidate:b", "candidate:c"],
+            coverage_by_candidate,
+            k=2,
+            costs={"candidate:a": 2.0, "candidate:b": 2.0, "candidate:c": 5.0},
+            budget=10.0,
+            coverage_floor=30.0,
+        )
+
+        self.assertEqual(result["solver_status"], "optimal_min_cost")
+        self.assertEqual(result["selected_candidate_ids"], ["candidate:a", "candidate:b"])
+        self.assertEqual(result["objective_covered_demand_weight"], 30.0)
+        self.assertEqual(result["total_candidate_cost"], 4.0)
+
+    def test_min_cost_coverage_solver_reports_infeasible_floor(self) -> None:
+        result = solve_min_cost_coverage_pulp(
+            ["candidate:a"],
+            {"candidate:a": {"zone:1": 10.0}},
+            k=1,
+            costs={"candidate:a": 1.0},
+            budget=1.0,
+            coverage_floor=20.0,
+        )
+
+        self.assertEqual(result["solver_status"], "milp_infeasible")
+        self.assertEqual(result["selected_candidate_ids"], [])
+
+    def test_optimization_builder_outputs_min_cost_method_and_floor_diagnostics(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            baseline_path = root / "baseline.csv"
+            coverage_path = root / "coverage.csv"
+            scenario_path = root / "scenario.csv"
+            summary_path = root / "summary.csv"
+            selected_path = root / "selected.csv"
+            diagnostics_path = root / "diagnostics.csv"
+            baseline_path.write_text(
+                "\n".join(
+                    [
+                        "scenario_id,candidate_site_id,country_code,nuts_id,site_type,coverage_radius_km,baseline_score,rank_within_scenario",
+                        "scenario:base,candidate:a,BE,BE100,fuel,30,0.9,1",
+                        "scenario:base,candidate:b,BE,BE100,fuel,30,0.8,2",
+                        "scenario:base,candidate:c,BE,BE100,fuel,30,0.7,3",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            coverage_path.write_text(
+                "\n".join(
+                    [
+                        "candidate_site_id,demand_zone_id,coverage_radius_km,pair_eligible_flag,demand_weight_contribution",
+                        "candidate:a,zone:1,30,1,10",
+                        "candidate:a,zone:2,30,1,10",
+                        "candidate:b,zone:2,30,1,10",
+                        "candidate:b,zone:3,30,1,10",
+                        "candidate:c,zone:1,30,1,10",
+                        "candidate:c,zone:2,30,1,10",
+                        "candidate:c,zone:3,30,1,10",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            scenario_path.write_text(
+                "\n".join(
+                    [
+                        "scenario_id,entity_type,entity_id,c_j,b,k",
+                        "scenario:base,candidate_site,candidate:a,2,10,2",
+                        "scenario:base,candidate_site,candidate:b,2,10,2",
+                        "scenario:base,candidate_site,candidate:c,5,10,2",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            build_optimization_results_tile_smoke(
+                baseline_path=baseline_path,
+                coverage_path=coverage_path,
+                scenario_path=scenario_path,
+                summary_output_path=summary_path,
+                selected_output_path=selected_path,
+                diagnostics_output_path=diagnostics_path,
+                shortlist_size=3,
+            )
+            with summary_path.open(newline="", encoding="utf-8") as handle:
+                summary_rows = list(csv.DictReader(handle))
+            with diagnostics_path.open(newline="", encoding="utf-8") as handle:
+                diagnostics_rows = list(csv.DictReader(handle))
+
+        methods = {row["method_id"] for row in summary_rows}
+        self.assertIn(MIN_COST_METHOD_ID, methods)
+        min_cost = next(row for row in summary_rows if row["method_id"] == MIN_COST_METHOD_ID)
+        self.assertEqual(min_cost["solver_status"], "optimal_min_cost")
+        self.assertEqual(float(min_cost["coverage_floor_demand_weight"]), 27.0)
+        self.assertEqual(float(min_cost["total_candidate_cost"]), 4.0)
+        self.assertIn("coverage_floor", {row["constraint_name"] for row in diagnostics_rows})
+
+    def test_optimization_sensitivity_builds_weight_set_shortlist_results(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            sensitivity_path = root / "sensitivity.csv"
+            coverage_path = root / "coverage.csv"
+            scenario_path = root / "scenario.csv"
+            output_path = root / "optimization_sensitivity.csv"
+            sensitivity_path.write_text(
+                "\n".join(
+                    [
+                        "weight_set_id,weight_set_name,scenario_id,candidate_site_id,coverage_radius_km,rank_within_weight_set_scenario",
+                        "weights:base,Base balanced,scenario:base,candidate:a,30,1",
+                        "weights:base,Base balanced,scenario:base,candidate:b,30,2",
+                        "weights:base,Base balanced,scenario:base,candidate:c,30,3",
+                        "weights:coverage-led,Coverage led,scenario:base,candidate:c,30,1",
+                        "weights:coverage-led,Coverage led,scenario:base,candidate:b,30,2",
+                        "weights:coverage-led,Coverage led,scenario:base,candidate:a,30,3",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            coverage_path.write_text(
+                "\n".join(
+                    [
+                        "candidate_site_id,demand_zone_id,coverage_radius_km,pair_eligible_flag,demand_weight_contribution",
+                        "candidate:a,zone:1,30,1,10",
+                        "candidate:b,zone:2,30,1,10",
+                        "candidate:c,zone:1,30,1,10",
+                        "candidate:c,zone:2,30,1,10",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            scenario_path.write_text(
+                "\n".join(
+                    [
+                        "scenario_id,entity_type,entity_id,c_j,b,k",
+                        "scenario:base,candidate_site,candidate:a,1,1,1",
+                        "scenario:base,candidate_site,candidate:b,1,1,1",
+                        "scenario:base,candidate_site,candidate:c,1,1,1",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            build_optimization_sensitivity_tile_smoke(
+                sensitivity_path=sensitivity_path,
+                coverage_path=coverage_path,
+                scenario_path=scenario_path,
+                output_path=output_path,
+                shortlist_size=2,
+            )
+            with output_path.open(newline="", encoding="utf-8") as handle:
+                rows = list(csv.DictReader(handle))
+
+        self.assertEqual(len(rows), 2)
+        self.assertTrue(all(row["method_id"] == SENSITIVITY_MCLP_METHOD_ID for row in rows))
+        base = next(row for row in rows if row["weight_set_id"] == "weights:base")
+        coverage_led = next(row for row in rows if row["weight_set_id"] == "weights:coverage-led")
+        self.assertEqual(float(base["objective_covered_demand_weight"]), 10.0)
+        self.assertEqual(float(coverage_led["objective_covered_demand_weight"]), 20.0)
+        self.assertEqual(float(coverage_led["objective_delta_vs_base_weight_set"]), 10.0)
+        self.assertEqual(int(coverage_led["overlap_with_base_solution_count"]), 0)
+
     def test_constraint_diagnostics_flag_budget_site_status_and_objective(self) -> None:
         rows = [
             {
@@ -339,7 +516,7 @@ class ChargeNetCoreTests(unittest.TestCase):
         ]
 
         diagnostics = constraint_diagnostics_rows(rows)
-        self.assertEqual(len(diagnostics), 8)
+        self.assertEqual(len(diagnostics), 10)
         by_key = {(row["scenario_id"], row["method_id"], row["constraint_name"]): row for row in diagnostics}
 
         budget = by_key[("scenario:base", "method:mclp-pulp-cbc", "budget")]
@@ -358,6 +535,28 @@ class ChargeNetCoreTests(unittest.TestCase):
         tight_solver = by_key[("scenario:tight", "method:mclp-pulp-cbc", "solver_status")]
         self.assertEqual(tight_solver["constraint_status"], "fail")
         self.assertIn("not an accepted feasible status", tight_solver["diagnostic_note"])
+
+        coverage_floor = by_key[("scenario:base", "method:mclp-pulp-cbc", "coverage_floor")]
+        self.assertEqual(coverage_floor["constraint_status"], "pass")
+        self.assertEqual(float(coverage_floor["lhs_value"]), 120.0)
+
+    def test_dq_diagnostics_match_min_cost_coverage_floor(self) -> None:
+        summary = {
+            ("scenario:base", MIN_COST_METHOD_ID): {
+                "scenario_id": "scenario:base",
+                "method_id": MIN_COST_METHOD_ID,
+                "solver_status": "optimal_min_cost",
+                "selected_candidate_count": "2",
+                "objective_covered_demand_weight": "30",
+                "coverage_floor_demand_weight": "27",
+                "total_candidate_cost": "4",
+                "budget": "10",
+                "k": "2",
+            }
+        }
+        diagnostics = constraint_diagnostics_rows([summary[("scenario:base", MIN_COST_METHOD_ID)]])
+
+        self.assertTrue(diagnostics_values_match_summary(diagnostics, summary))
 
     def test_candidate_capex_model_uses_site_type_risk_and_data_quality(self) -> None:
         low_risk_fuel = estimate_candidate_capex({"site_type": "fuel", "rollout_risk_score": "0.1", "data_quality_score": "0.9"})

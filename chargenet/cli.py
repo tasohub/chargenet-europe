@@ -15,7 +15,7 @@ from .exports import write_powerbi_exports
 from .osm_plan import build_osm_tile_plan
 from .osm_extract import DEFAULT_EXTRACTS, DEFAULT_PILOT_COUNTRIES, current_osm_fetch_gate, current_osm_tile_progress, rebuild_osm_tile_execution_log_all, run_osm_pilot_smoke, run_osm_tile_batch, run_osm_tile_smoke
 from .osm_clean import build_candidate_sites_from_tile_smoke, build_existing_chargers_from_tile_smoke
-from .optimization import build_optimization_constraint_diagnostics_tile_smoke, build_optimization_results_tile_smoke
+from .optimization import build_optimization_constraint_diagnostics_tile_smoke, build_optimization_results_tile_smoke, build_optimization_sensitivity_tile_smoke
 from .scenarios import build_scenario_inputs_sample, build_scenario_inputs_tile_smoke, write_service_radius_config
 from .sources import write_license_manifest
 from .transform import build_all_clean_samples, build_candidate_zone_coverage_sample
@@ -72,6 +72,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("build-baseline-scores-tile-smoke", help="Build baseline diligence-shortlist scores for tile-smoke candidates")
     subparsers.add_parser("build-baseline-sensitivity-tile-smoke", help="Build baseline weight-sensitivity mart for tile-smoke candidates")
     subparsers.add_parser("build-optimization-results-tile-smoke", help="Build smoke-scope maximal coverage optimization results")
+    subparsers.add_parser("build-optimization-sensitivity-tile-smoke", help="Build smoke-scope MILP sensitivity across baseline weight-set shortlists")
     subparsers.add_parser("build-optimization-diagnostics-tile-smoke", help="Build smoke-scope optimization constraint diagnostics")
     subparsers.add_parser("build-from-existing-samples", help="Rebuild clean/mart/report artifacts from existing raw samples without network fetches")
     subparsers.add_parser("run-phase3-sample", help="Run init, ingest, clean, coverage, and validation")
@@ -255,6 +256,13 @@ def main(argv: list[str] | None = None) -> int:
         data_dictionary = write_data_dictionary()
         report = write_quality_report()
         print(json.dumps({"mart_outputs": [str(path) for path in paths], "data_dictionary": str(data_dictionary), "quality_report": str(report)}, indent=2))
+        return 0
+
+    if args.command == "build-optimization-sensitivity-tile-smoke":
+        path = build_optimization_sensitivity_tile_smoke()
+        data_dictionary = write_data_dictionary()
+        report = write_quality_report()
+        print(json.dumps({"mart_output": str(path), "data_dictionary": str(data_dictionary), "quality_report": str(report)}, indent=2))
         return 0
 
     if args.command == "build-optimization-diagnostics-tile-smoke":

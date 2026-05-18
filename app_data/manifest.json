@@ -1,0 +1,10 @@
+{
+  "source": "generated_from_local_chargeNet_marts",
+  "scope": "Belgium, Germany, France, Netherlands tile-smoke Phase 5 outputs",
+  "not_investment_grade": true,
+  "files": {
+    "optimization_results_tile_smoke.csv": 12,
+    "optimization_sensitivity_tile_smoke.csv": 15,
+    "optimization_selected_sites_tile_smoke.csv": 66
+  }
+}

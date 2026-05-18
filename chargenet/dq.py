@@ -88,6 +88,7 @@ def validate_clean_samples() -> dict:
     checks.extend(validate_optional_tile_smoke_scenario_inputs())
     checks.extend(validate_optional_baseline_scores_tile_smoke())
     checks.extend(validate_optional_baseline_sensitivity_tile_smoke())
+    checks.extend(validate_optional_optimization_sensitivity_tile_smoke())
     checks.extend(validate_optional_optimization_results_tile_smoke())
     return summarize_checks(checks)
 
@@ -993,6 +994,103 @@ def validate_optional_baseline_sensitivity_tile_smoke() -> list[dict]:
     return checks
 
 
+def validate_optional_optimization_sensitivity_tile_smoke() -> list[dict]:
+    path = CLEAN_DIR.parent / "marts" / "mart_optimization_sensitivity_tile_smoke.csv"
+    if not path.exists():
+        return []
+    checks = []
+    checks.extend(
+        validate_csv_required_fields(
+            path,
+            [
+                "sensitivity_run_id",
+                "scenario_id",
+                "weight_set_id",
+                "method_id",
+                "solver_status",
+                "shortlist_size",
+                "candidate_pool_count",
+                "selected_candidate_count",
+                "objective_covered_demand_weight",
+                "base_weight_set_objective",
+                "objective_delta_vs_base_weight_set",
+                "overlap_with_base_solution_count",
+                "total_candidate_cost",
+                "budget",
+                "k",
+                "allowed_use_note",
+                "proxy_assumption_label",
+            ],
+        )
+    )
+    rows = read_csv_rows(path)
+    sensitivity_source = CLEAN_DIR.parent / "marts" / "mart_baseline_sensitivity_tile_smoke.csv"
+    source_rows = read_csv_rows(sensitivity_source)
+    expected_pairs = {(row["scenario_id"], row["weight_set_id"]) for row in source_rows}
+    run_ids = {row["sensitivity_run_id"] for row in rows}
+    actual_pairs = {(row["scenario_id"], row["weight_set_id"]) for row in rows}
+    base_rows = [row for row in rows if row.get("weight_set_id") == "weights:base"]
+    checks.extend(
+        [
+            {
+                "check": "optimization_sensitivity_grain_unique",
+                "path": str(path.as_posix()),
+                "passed": len(run_ids) == len(rows),
+                "detail": "one row per scenario, weight set, and method",
+            },
+            {
+                "check": "optimization_sensitivity_pairs_complete",
+                "path": str(path.as_posix()),
+                "passed": expected_pairs.issubset(actual_pairs),
+                "detail": f"{len(actual_pairs)} rows for {len(expected_pairs)} expected scenario-weight pairs",
+            },
+            {
+                "check": "optimization_sensitivity_status_values",
+                "path": str(path.as_posix()),
+                "passed": all(row["solver_status"] == "optimal_milp" for row in rows),
+                "detail": "all current weight-set shortlist solves reached an optimal MILP status",
+            },
+            {
+                "check": "optimization_sensitivity_budget_constraint",
+                "path": str(path.as_posix()),
+                "passed": all(float(row["total_candidate_cost"]) <= float(row["budget"]) for row in rows),
+                "detail": "total candidate cost checked against budget",
+            },
+            {
+                "check": "optimization_sensitivity_site_count_constraint",
+                "path": str(path.as_posix()),
+                "passed": all(int(row["selected_candidate_count"]) <= int(row["k"]) for row in rows),
+                "detail": "selected candidate count checked against k",
+            },
+            {
+                "check": "optimization_sensitivity_objective_nonnegative",
+                "path": str(path.as_posix()),
+                "passed": all(float(row["objective_covered_demand_weight"]) >= 0 for row in rows),
+                "detail": "objective covered demand checked",
+            },
+            {
+                "check": "optimization_sensitivity_base_delta_zero",
+                "path": str(path.as_posix()),
+                "passed": bool(base_rows) and all(abs(float(row["objective_delta_vs_base_weight_set"])) < 0.000001 for row in base_rows),
+                "detail": f"{len(base_rows)} base-weight optimization rows checked",
+            },
+            {
+                "check": "optimization_sensitivity_overlap_pct_range",
+                "path": str(path.as_posix()),
+                "passed": all(0 <= float(row["overlap_with_base_solution_pct"]) <= 1 for row in rows),
+                "detail": "overlap percentage checked in [0,1]",
+            },
+            {
+                "check": "optimization_sensitivity_no_build_language",
+                "path": str(path.as_posix()),
+                "passed": not any(("build" + " now") in row.get("allowed_use_note", "").lower() or ("depl" + "oy") in row.get("allowed_use_note", "").lower() for row in rows),
+                "detail": "optimization sensitivity output uses diligence language",
+            },
+        ]
+    )
+    return checks
+
+
 def validate_optional_optimization_results_tile_smoke() -> list[dict]:
     summary_path = CLEAN_DIR.parent / "marts" / "mart_optimization_results_tile_smoke.csv"
     selected_path = CLEAN_DIR.parent / "marts" / "fact_optimization_selected_sites_tile_smoke.csv"
@@ -1078,7 +1176,7 @@ def validate_optional_optimization_results_tile_smoke() -> list[dict]:
     methods_by_scenario: dict[str, set[str]] = {}
     for row in summary_rows:
         methods_by_scenario.setdefault(row["scenario_id"], set()).add(row["method_id"])
-    expected_diagnostics = {"budget", "site_count", "solver_status", "objective_nonnegative"}
+    expected_diagnostics = {"budget", "site_count", "solver_status", "objective_nonnegative", "coverage_floor"}
     diagnostics_by_summary: dict[tuple[str, str], set[str]] = {}
     diagnostics_keys = []
     for row in diagnostics_rows:
@@ -1112,7 +1210,7 @@ def validate_optional_optimization_results_tile_smoke() -> list[dict]:
             {
                 "check": "optimization_summary_methods_complete",
                 "path": str(summary_path.as_posix()),
-                "passed": all({"method:baseline-topk", "method:mclp-shortlist-exact", "method:mclp-pulp-cbc"}.issubset(methods_by_scenario.get(scenario_id, set())) for scenario_id in scenario_ids),
+                "passed": all({"method:baseline-topk", "method:mclp-shortlist-exact", "method:mclp-pulp-cbc", "method:min-cost-coverage-pulp"}.issubset(methods_by_scenario.get(scenario_id, set())) for scenario_id in scenario_ids),
                 "detail": json.dumps({key: sorted(value) for key, value in sorted(methods_by_scenario.items())}),
             },
             {
@@ -1187,7 +1285,7 @@ def validate_optional_optimization_results_tile_smoke() -> list[dict]:
 
 
 def diagnostics_values_match_summary(diagnostics_rows: list[dict], summary_by_key: dict[tuple[str, str], dict]) -> bool:
-    accepted_statuses = {"benchmark_feasible", "optimal_milp", "optimal_shortlist"}
+    accepted_statuses = {"benchmark_feasible", "optimal_milp", "optimal_min_cost", "optimal_shortlist"}
     for row in diagnostics_rows:
         summary = summary_by_key.get((row["scenario_id"], row["method_id"]))
         if not summary:
@@ -1206,6 +1304,11 @@ def diagnostics_values_match_summary(diagnostics_rows: list[dict], summary_by_ke
         elif constraint_name == "objective_nonnegative":
             lhs = float(summary["objective_covered_demand_weight"])
             if not numeric_values_match(row, lhs, 0.0, lhs):
+                return False
+        elif constraint_name == "coverage_floor":
+            lhs = float(summary["objective_covered_demand_weight"])
+            rhs = float(summary.get("coverage_floor_demand_weight") or 0)
+            if not numeric_values_match(row, lhs, rhs, lhs - rhs):
                 return False
         elif constraint_name == "solver_status":
             rhs_values = set(row.get("rhs_value", "").split("|"))
