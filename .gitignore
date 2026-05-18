@@ -1,0 +1,20 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.env
+.env.*
+
+# ChargeNet generated data artifacts.
+data/chargenet/raw/*
+data/chargenet/clean/*
+data/chargenet/marts/*
+!data/chargenet/raw/.gitkeep
+!data/chargenet/clean/.gitkeep
+!data/chargenet/marts/.gitkeep
+
+# ChargeNet generated reports.
+reports/chargenet/*
+!reports/chargenet/.gitignore
+!reports/chargenet/.gitkeep

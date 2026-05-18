@@ -1,0 +1,23 @@
+[
+  {
+    "scenario_id": "scenario:radius-conservative",
+    "scenario_slug": "radius_conservative",
+    "coverage_radius_km": 15,
+    "classification": "assumption",
+    "allowed_use_note": "Sensitivity input for baseline and MILP; not observed driver behavior."
+  },
+  {
+    "scenario_id": "scenario:radius-base",
+    "scenario_slug": "radius_base",
+    "coverage_radius_km": 30,
+    "classification": "assumption",
+    "allowed_use_note": "Base V1 service-radius assumption shared by baseline and MILP."
+  },
+  {
+    "scenario_id": "scenario:radius-aggressive",
+    "scenario_slug": "radius_aggressive",
+    "coverage_radius_km": 50,
+    "classification": "assumption",
+    "allowed_use_note": "Aggressive coverage-radius assumption for sensitivity only."
+  }
+]

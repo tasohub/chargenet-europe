@@ -1,0 +1,93 @@
+from __future__ import annotations
+
+import json
+from dataclasses import asdict, dataclass
+from pathlib import Path
+
+from .paths import CONFIG_DIR, ensure_project_dirs
+
+
+@dataclass(frozen=True)
+class SourceLicense:
+    source_id: str
+    name: str
+    role: str
+    license_or_terms: str
+    attribution: str
+    public_repo_policy: str
+    v1_decision: str
+
+
+LICENSES = [
+    SourceLicense(
+        source_id="osm_overpass",
+        name="OpenStreetMap / Overpass",
+        role="Location-level charger supply and candidate POIs",
+        license_or_terms="Open Database License (ODbL); attribution and derived-database obligations apply.",
+        attribution="Contains information from OpenStreetMap, which is made available under the Open Database License.",
+        public_repo_policy="Publish scripts/configs and small illustrative samples only until ODbL derived-data obligations are reviewed.",
+        v1_decision="Primary V1 source for location-level public infrastructure proxies.",
+    ),
+    SourceLicense(
+        source_id="gisco_nuts",
+        name="Eurostat/GISCO NUTS 2024",
+        role="Administrative geography and map backbone",
+        license_or_terms="EU/Eurostat reuse with attribution; dataset-level notes should be retained.",
+        attribution="Source: Eurostat/GISCO NUTS 2024.",
+        public_repo_policy="Allow public use with source/version metadata and attribution.",
+        v1_decision="Primary V1 geography source.",
+    ),
+    SourceLicense(
+        source_id="eurostat_population",
+        name="Eurostat regional population API",
+        role="Demand-zone population proxy",
+        license_or_terms="EU/Eurostat reuse with attribution; dataset code and query dimensions required.",
+        attribution="Source: Eurostat dataset demo_r_pjanaggr3.",
+        public_repo_policy="Allow public use with source/query metadata and attribution.",
+        v1_decision="Primary V1 demand proxy.",
+    ),
+    SourceLicense(
+        source_id="eafo",
+        name="European Alternative Fuels Observatory",
+        role="Country-level market context",
+        license_or_terms="Use only after exact graph/download workflow and terms are recorded.",
+        attribution="Source: European Alternative Fuels Observatory.",
+        public_repo_policy="Deck/context only until reproducible download path is pinned.",
+        v1_decision="Strategic context, not core model input.",
+    ),
+    SourceLicense(
+        source_id="open_charge_map",
+        name="Open Charge Map",
+        role="Optional charger supply cross-check",
+        license_or_terms="API key required; terms and attribution must be checked before use.",
+        attribution="Source: Open Charge Map.",
+        public_repo_policy="Optional only; do not expose API keys or key-dependent raw extracts.",
+        v1_decision="Optional enrichment.",
+    ),
+    SourceLicense(
+        source_id="entsoe",
+        name="ENTSO-E Transparency Platform",
+        role="Optional V1.5 grid/load context",
+        license_or_terms="Registration/API terms required before use.",
+        attribution="Source: ENTSO-E Transparency Platform.",
+        public_repo_policy="Excluded from V1 raw repo; add only after reproducible registered workflow is documented.",
+        v1_decision="Excluded from V1 core.",
+    ),
+    SourceLicense(
+        source_id="huggingface_ev",
+        name="Hugging Face EV datasets",
+        role="Optional publishing/demo or secondary comparison",
+        license_or_terms="Dataset-level license varies; dataset card must be checked before use.",
+        attribution="Use exact Hugging Face dataset card attribution.",
+        public_repo_policy="Do not treat community datasets as authoritative model inputs.",
+        v1_decision="Optional demo/publishing layer.",
+    ),
+]
+
+
+def write_license_manifest(path: Path | None = None) -> Path:
+    ensure_project_dirs()
+    target = path or CONFIG_DIR / "license_manifest.json"
+    payload = [asdict(item) for item in LICENSES]
+    target.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    return target

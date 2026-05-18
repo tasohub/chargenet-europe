@@ -1,0 +1,5 @@
+country_code,candidate_count,candidates_with_coverage,average_baseline_score,max_covered_zone_count,total_covered_demand_weight,demand_zone_count,candidate_coverage_rate
+BE,818,815,0.29971545843520786,9,916089710.0,44,0.9963325183374083
+DE,1119,1118,0.29102148525469174,13,1074839787.0,400,0.9991063449508489
+FR,21,21,0.7530354285714286,5,161774209.0,101,1.0
+NL,15,15,0.26568539999999996,3,7233012.0,40,1.0

@@ -1,0 +1,20 @@
+{
+  "pilot_countries": [
+    "BE",
+    "DE",
+    "FR",
+    "NL"
+  ],
+  "demand_zones": 585,
+  "candidate_sites": 1973,
+  "baseline_rows": 5919,
+  "sensitivity_rows": 29595,
+  "raw_checks": 47,
+  "raw_failures": 0,
+  "clean_checks": 2068,
+  "clean_failures": 0,
+  "fetched_jobs": 413,
+  "historical_failed_attempts": 1,
+  "unresolved_failed_attempts": 0,
+  "output_limit_hits": 262
+}

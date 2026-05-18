@@ -1,0 +1,16 @@
+{
+  "scope_version": "phase3_pilot_v1",
+  "pilot_countries": ["BE", "DE", "FR", "NL"],
+  "nuts_version": "2024",
+  "demand_zone_grain": "NUTS3",
+  "population_dataset": "demo_r_pjanaggr3",
+  "population_year": 2025,
+  "coordinate_reference_system": "WGS84",
+  "full_pilot_status": "planned_not_yet_ingested",
+  "sample_scope": {
+    "country": "BE",
+    "demand_zone": "BE100",
+    "bbox": [50.83, 4.30, 50.95, 4.55],
+    "purpose": "small smoke-test sample only"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "query_config_version": "phase3_sample_v1",
+  "osm": {
+    "endpoint": "https://overpass-api.de/api/interpreter",
+    "sample_queries": {
+      "charging_stations": "node/way/relation amenity=charging_station in Brussels sample bbox",
+      "candidate_pois": "node highway=services, way highway=services, node amenity=fuel in Brussels sample bbox"
+    },
+    "pilot_expansion_rule": "tile each pilot country or NUTS3 area; do not query whole countries in a single Overpass request",
+    "rate_limit_rule": "single concurrency, delay between requests, split overloaded tiles"
+  },
+  "gisco": {
+    "nuts_version": "2024",
+    "required_levels": [0, 3],
+    "geometry_resolution": "20M for sample; evaluate 10M/20M tradeoff before Power BI export"
+  },
+  "eurostat": {
+    "dataset": "demo_r_pjanaggr3",
+    "dimensions": {
+      "sex": "T",
+      "age": "TOTAL",
+      "unit": "NR",
+      "time": "2025"
+    }
+  }
+}
