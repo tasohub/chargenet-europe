@@ -287,25 +287,52 @@ with tab_sensitivity:
 
 with tab_optimization:
     st.subheader("Phase 5 Optimization")
+
+    st.info(
+        "**The headline finding.** Baseline ranking concentrates picks in a small set of "
+        "redundant high-population zones. MILP max-coverage, given the same number of picks, "
+        "spreads to many more zones — same site count, more demand reached. This is the "
+        "load-bearing reason to build the optimization layer instead of just sorting by score."
+    )
+
     optimization = load_optimization_results()
     optimization_sensitivity = load_optimization_sensitivity()
     selected_sites = load_optimization_selected_sites()
     scenario_ids = sorted(optimization["scenario_id"].dropna().unique().tolist())
     default_index = scenario_ids.index(BASE_SCENARIO) if BASE_SCENARIO in scenario_ids else 0
-    selected_scenario = st.selectbox("Scenario", scenario_ids, index=default_index)
+    scenario_labels = {sid: sid.replace("scenario:", "").replace("-", " ").title() for sid in scenario_ids}
+    selected_scenario = st.selectbox(
+        "Scenario",
+        scenario_ids,
+        index=default_index,
+        format_func=lambda sid: scenario_labels.get(sid, sid),
+    )
     scenario_results = optimization[optimization["scenario_id"] == selected_scenario].copy()
     baseline = scenario_results[scenario_results["method_id"] == "method:baseline-topk"]
     max_coverage = scenario_results[scenario_results["method_id"] == "method:mclp-pulp-cbc"]
     min_cost = scenario_results[scenario_results["method_id"] == "method:min-cost-coverage-pulp"]
-    metric_cols = st.columns(3)
+
+    # Headline diversification metric: zone coverage uplift for SAME pick count
+    baseline_zones = float(baseline["covered_zone_count"].iloc[0]) if not baseline.empty else 0.0
+    milp_zones = float(max_coverage["covered_zone_count"].iloc[0]) if not max_coverage.empty else 0.0
+    zone_multiplier = (milp_zones / baseline_zones) if baseline_zones > 0 else 0.0
+
+    metric_cols = st.columns(4)
     with metric_cols[0]:
-        st.metric("Best covered demand proxy", f"{scenario_results['objective_covered_demand_weight'].max() / 1_000_000:.1f}M")
+        st.metric(
+            "Zones covered: MILP vs baseline",
+            f"{milp_zones:.0f} vs {baseline_zones:.0f}",
+            delta=f"{zone_multiplier:.1f}x more zones",
+            help="Same site count, but MILP spreads across many more demand zones. This is the diversification gain.",
+        )
     with metric_cols[1]:
-        uplift = float(max_coverage["improvement_vs_baseline_pct"].iloc[0]) if not max_coverage.empty else 0.0
-        st.metric("MILP uplift vs baseline", f"{uplift:.1%}")
+        st.metric("Best covered demand proxy", f"{scenario_results['objective_covered_demand_weight'].max() / 1_000_000:.1f}M")
     with metric_cols[2]:
+        uplift = float(max_coverage["improvement_vs_baseline_pct"].iloc[0]) if not max_coverage.empty else 0.0
+        st.metric("MILP demand uplift vs baseline", f"{uplift:.1%}", help="Extra covered demand for the same pick count.")
+    with metric_cols[3]:
         saving = float(min_cost["cost_saving_vs_baseline_pct"].iloc[0]) if not min_cost.empty else 0.0
-        st.metric("Min-cost saving vs baseline", f"{saving:.1%}")
+        st.metric("Min-cost saving vs baseline", f"{saving:.1%}", help="Min-cost MILP finds the cheapest subset that meets the coverage floor.")
     st.pyplot(plot_optimization_methods(optimization, selected_scenario), width="stretch")
     display_cols = [
         "method_label",
