@@ -26,11 +26,11 @@ Not in scope: investment advice, final site selection, traffic forecasting, land
 
 ## Live Demo
 
-Streamlit Cloud: [pending deployment](https://share.streamlit.io/tasohub/chargenet-europe/main/app.py)
+**[chargenet-europe.streamlit.app](https://chargenet-europe.streamlit.app/)** — interactive tabs for top candidates, sensitivity across 5 weight sets, methodology, coverage map, and the Phase 5 MILP optimization (max-coverage and min-cost formulations).
 
 ## Tech Stack
 
-Python, Streamlit, pandas, matplotlib, seaborn, OpenStreetMap Overpass, Eurostat, GISCO NUTS, Power BI CSV exports, PuLP/CBC for the upcoming MILP phase.
+Python, Streamlit, pandas, matplotlib, seaborn, OpenStreetMap Overpass, Eurostat, GISCO NUTS, Power BI CSV exports, PuLP/CBC for the Phase 5 MILP optimization layer.
 
 ## Run Locally
 
