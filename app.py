@@ -379,25 +379,73 @@ with tab_optimization:
     )
     st.caption(
         "Phase 5 uses public POI proxies, straight-line coverage, population demand weights, and unit-cost assumptions. "
-        "It is an optimization checkpoint for diligence, not an investment-grade site decision."
+        "Outputs are a diligence shortlist, not an investment-grade site decision."
     )
 
 with tab_method:
     st.subheader("Methodology")
+
     st.markdown(
         """
-        The current demo presents the Phase 4 baseline and Phase 5 MILP checkpoint. Candidate sites are
-        OpenStreetMap POI proxies, demand zones are NUTS3 regions, and population is used as a
-        demand proxy. The baseline score combines coverage, data quality, rollout risk, and
-        competition. Five weight sets test whether rankings and optimization shortlists depend on
-        one fragile assumption set.
-
-        Full methodology: [GitHub README](https://github.com/tasohub/chargenet-europe#readme)
-        and `docs/portfolio/METHODOLOGY.md`.
-
-        Phase 5 is a public-proxy MILP checkpoint with max-coverage and min-cost formulations.
-        It does not model grid capacity, permits, land availability, traffic flows, or negotiated CAPEX.
+        Four pilot countries (BE, DE, FR, NL). Public-data only. The pipeline is fully
+        reproducible — same inputs and config yield identical outputs.
         """
+    )
+
+    st.markdown("**Data sources**")
+    st.markdown(
+        """
+        - **Candidate sites** — OpenStreetMap POIs (fuel, parking, supermarket, motorway services) treated as charger-site *proxies*, not validated locations
+        - **Demand zones** — 585 NUTS3 regions from GISCO
+        - **Demand weight** — Eurostat population (proxy; no traffic, no income, no fleet data)
+        """
+    )
+
+    st.markdown("**Phase 4 — baseline scoring**")
+    st.markdown(
+        """
+        Each candidate scored on 4 components: **coverage** (zones reachable), **data quality**
+        (completeness of OSM tags), **rollout risk** (country + zone density signals), and
+        **competition** (existing charger density within radius). Components combined into a
+        weighted score for the final shortlist.
+        """
+    )
+
+    st.markdown("**Sensitivity analysis — the differentiator**")
+    st.markdown(
+        """
+        The baseline is run under **5 different weight sets** (equal, coverage-heavy, risk-heavy,
+        competition-heavy, quality-heavy). The Sensitivity tab shows how candidate ranks shift
+        between them. This is the load-bearing finding: **a site that ranks high under every
+        weight set is a stronger candidate than one that wins only one configuration.**
+        """
+    )
+
+    st.markdown("**Phase 5 — MILP optimization (shipped)**")
+    st.markdown(
+        """
+        Two formulations using PuLP + CBC:
+        - **Max-coverage** — pick exactly k sites that maximize covered demand
+        - **Min-cost** — minimize cost subject to a coverage floor
+
+        MILP is also re-solved across all 5 weight sets so optimization stability can be compared
+        to baseline-ranking stability.
+        """
+    )
+
+    st.markdown("**What this does NOT model** *(explicit non-scope)*")
+    st.markdown(
+        """
+        Grid capacity, permits, land availability, traffic flows, charging-session utilization,
+        negotiated CAPEX, lease cost, local incentives, time-of-day demand, or investment-grade
+        economics. The outputs are a structured diligence shortlist — not a site decision.
+        """
+    )
+
+    st.markdown(
+        "Full technical write-up: [README](https://github.com/tasohub/chargenet-europe#readme) "
+        "· [METHODOLOGY.md](https://github.com/tasohub/chargenet-europe/blob/main/docs/portfolio/METHODOLOGY.md) "
+        "· [Phase 5 report](https://github.com/tasohub/chargenet-europe/blob/main/docs/chargenet-europe/phase-5-optimization-mvp-report.md)"
     )
 
 with tab_coverage:
