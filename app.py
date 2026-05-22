@@ -34,7 +34,7 @@ DISCLAIMER = (
 )
 
 
-st.set_page_config(page_title="ChargeNet Europe", page_icon="EV", layout="wide")
+st.set_page_config(page_title="ChargeNet Europe", page_icon="⚡", layout="wide")
 
 st.markdown(
     """
@@ -700,12 +700,12 @@ with st.sidebar:
     st.title("ChargeNet Europe")
     st.markdown("**Read this first**")
     st.info(
-        "What this is: public-data EV charging expansion diligence.\n\n"
-        "Headline: optimization covered 120 zones vs 8 for the simple top-10 in the aggressive-radius scenario.\n\n"
-        f"Disclaimer: {DISCLAIMER}"
+        "**What this is:** a public-data screening tool for EV charging expansion across BE/DE/FR/NL.\n\n"
+        "**Headline finding:** an optimization-picked top 10 reaches 120 demand zones; a naive top 10 reaches only 8. Same number of sites, 15× more coverage.\n\n"
+        f"{DISCLAIMER}"
     )
     st.caption("Scope: Belgium, Germany, France, Netherlands.")
-    st.caption("Status: Phase 5 optimization MVP complete. The model still uses public proxies and unit-cost assumptions.")
+    st.caption("Status: Phase 5 (MILP optimization) shipped. Uses public proxies and unit-cost assumptions.")
     release_kpi = next((kpi for kpi in recruiter_kpis if kpi["key"] == "release_gate"), None)
     if release_kpi:
         st.metric("Release gate", release_kpi["value"], release_kpi["caption"])
@@ -715,16 +715,17 @@ with st.sidebar:
         st.metric("QA failures", f"{int(metrics.get('raw_failures', 0)) + int(metrics.get('clean_failures', 0))}")
 
 st.title("ChargeNet Europe")
-st.caption("Public-data EV charging expansion diligence for Belgium, Germany, France, and the Netherlands.")
+st.caption("A public-data screening tool for EV charging expansion across Belgium, Germany, France, and the Netherlands.")
 st.markdown(
     """
     <div class='hero-panel'>
       <div class='hero-kicker'>Operations analytics portfolio demo</div>
-      <div class='hero-title'>A decision-support workflow for EV charging expansion diligence.</div>
+      <div class='hero-title'>Which sites should an EV charging operator look at first?</div>
       <p class='hero-copy'>
-        The demo turns public map, regional boundary, and population data into location screening,
-        sensitivity analysis, and optimization outputs. It is built for early-stage business analysis:
-        useful for prioritization, honest about public-proxy limits, and guarded by release checks before demo use.
+        Public map, regional boundary, and population data go in. A scored shortlist comes out,
+        stress-tested across five different priority weightings and against a MILP optimizer.
+        Built to support early prioritization decisions, honest about what public data can and
+        cannot tell you, and gated by automated release checks before demo use.
       </p>
     </div>
     """,
@@ -855,6 +856,10 @@ with tab_optimization:
     baseline = scenario_results[scenario_results["method_id"] == "method:baseline-topk"]
     max_coverage = scenario_results[scenario_results["method_id"] == "method:mclp-pulp-cbc"]
     min_cost = scenario_results[scenario_results["method_id"] == "method:min-cost-coverage-pulp"]
+    st.caption(
+        "Headline metrics for the selected scenario. *MILP uplift* = extra demand covered for the same pick count. "
+        "*Min-cost saving* = cost reduction vs baseline while still meeting a 90% coverage floor (not a full-service saving)."
+    )
     metric_cols = st.columns(3)
     with metric_cols[0]:
         st.metric("Best covered demand proxy", f"{scenario_results['objective_covered_demand_weight'].max() / 1_000_000:.1f}M")
@@ -863,11 +868,8 @@ with tab_optimization:
         st.metric("MILP uplift vs baseline", f"{uplift:.1%}")
     with metric_cols[2]:
         saving = float(min_cost["cost_saving_vs_baseline_pct"].iloc[0]) if not min_cost.empty else 0.0
-        st.metric("90% floor cost saving", f"{saving:.1%}")
+        st.metric("Min-cost saving (90% coverage floor)", f"{saving:.1%}")
     render_insight_cards(build_optimization_takeaways(optimization.to_dict("records"), selected_scenario))
-    st.caption(
-        "Cost-floor savings are measured against a 90% baseline-coverage floor; they are not like-for-like full-service savings."
-    )
     st.pyplot(plot_optimization_methods(optimization, selected_scenario), width="stretch")
     method_narrative = method_comparison[method_comparison["scenario_id"] == selected_scenario].copy()
     if not method_narrative.empty:
@@ -1152,29 +1154,74 @@ with tab_optimization:
         )
     st.caption(
         "Phase 5 uses public POI proxies, straight-line coverage, population demand weights, and unit-cost assumptions. "
-        "It is an optimization checkpoint for diligence, not an investment-grade site decision."
+        "Outputs are a diligence shortlist, not an investment-grade site decision."
     )
 
 with tab_method:
     st.subheader("Methodology")
-    st.info(
-        "Interview readout: ChargeNet starts with public source governance, builds candidate and demand marts, "
-        "scores candidates under multiple assumptions, then uses MILP to test whether a better coverage/cost tradeoff exists."
-    )
+
     st.markdown(
         """
-        The current demo presents the Phase 4 baseline and Phase 5 MILP checkpoint. Candidate sites are
-        OpenStreetMap POI proxies, demand zones are NUTS3 regions, and population is used as a
-        demand proxy. The baseline score combines coverage, data quality, rollout risk, and
-        competition. Five weight sets test whether rankings and optimization shortlists depend on
-        one fragile assumption set.
-
-        Full methodology: [GitHub README](https://github.com/tasohub/chargenet-europe#readme)
-        and `docs/portfolio/METHODOLOGY.md`.
-
-        Phase 5 is a public-proxy MILP checkpoint with max-coverage and min-cost formulations.
-        It does not model grid capacity, permits, land availability, traffic flows, or negotiated CAPEX.
+        Four pilot countries (BE, DE, FR, NL). Public-data only. The pipeline is fully
+        reproducible: same inputs and config yield identical outputs.
         """
+    )
+
+    st.markdown("**Data sources**")
+    st.markdown(
+        """
+        - **Candidate sites** — OpenStreetMap POIs (fuel, parking, supermarket, motorway services) treated as charger-site *proxies*, not validated locations
+        - **Demand zones** — 585 NUTS3 regions from GISCO
+        - **Demand weight** — Eurostat population (proxy; no traffic, no income, no fleet data)
+        """
+    )
+
+    st.markdown("**Phase 4 — baseline scoring**")
+    st.markdown(
+        """
+        Each candidate scored on 4 components: **coverage** (zones reachable), **data quality**
+        (completeness of OSM tags), **rollout risk** (country + zone density signals), and
+        **competition** (existing charger density within radius). Components combined into a
+        weighted score for the final shortlist.
+        """
+    )
+
+    st.markdown("**Sensitivity analysis — the differentiator**")
+    st.markdown(
+        """
+        The baseline is run under **5 different weight sets** (equal, coverage-heavy, risk-heavy,
+        competition-heavy, quality-heavy). The Sensitivity tab shows how candidate ranks shift
+        between them. The load-bearing finding: **a site that ranks high under every weight set
+        is a stronger candidate than one that wins only one configuration.**
+        """
+    )
+
+    st.markdown("**Phase 5 — MILP optimization (shipped)**")
+    st.markdown(
+        """
+        Two formulations using PuLP + CBC:
+        - **Max-coverage** — pick exactly k sites that maximize covered demand
+        - **Min-cost** — minimize cost subject to a coverage floor
+
+        MILP is also re-solved across all 5 weight sets so optimization stability can be compared
+        to baseline-ranking stability.
+        """
+    )
+
+    st.markdown("**What this does NOT model** *(explicit non-scope)*")
+    st.markdown(
+        """
+        Grid capacity, permits, land availability, traffic flows, charging-session utilization,
+        negotiated CAPEX, lease cost, local incentives, time-of-day demand, or investment-grade
+        economics. The outputs are a structured diligence shortlist, not a site decision.
+        """
+    )
+
+    st.markdown(
+        "Full technical write-up: [README](https://github.com/tasohub/chargenet-europe#readme) "
+        "· [METHODOLOGY.md](https://github.com/tasohub/chargenet-europe/blob/main/docs/portfolio/METHODOLOGY.md) "
+        "· [Phase 5 report](https://github.com/tasohub/chargenet-europe/blob/main/docs/chargenet-europe/phase-5-optimization-mvp-report.md) "
+        "· [Recruiter brief (60-sec read)](https://github.com/tasohub/chargenet-europe/blob/main/docs/portfolio/RECRUITER_BRIEF.md)"
     )
     st.subheader("Metric Glossary")
     st.dataframe(
