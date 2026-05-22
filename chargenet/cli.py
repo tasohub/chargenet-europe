@@ -4,11 +4,19 @@ import argparse
 import json
 
 from .baseline import build_baseline_scores_tile_smoke, build_baseline_sensitivity_tile_smoke
+from .completion_gate import completion_gate_passed, evaluate_completion_gate, write_completion_gate
 from .coverage import build_tile_smoke_coverage
+from .country_diagnostics import build_optimization_country_diagnostics_tile_smoke
+from .drift import build_pipeline_snapshot_metrics_tile_smoke, compare_snapshot_metrics, promote_reference_snapshot_metrics_tile_smoke, stage_reference_snapshot_metrics_tile_smoke
 from .dq import write_quality_report
 from .ingest import ingest_all_samples
 from .ingest import ingest_eurostat_population_pilot, ingest_gisco_nuts_level3
+from .lineage import build_candidate_lineage_trace_tile_smoke, build_optimization_zone_trace_tile_smoke
+from .method_comparison import build_method_comparison_narrative_tile_smoke
+from .named_optimization import build_named_optimization_scenario
 from .pilot import build_pilot_nuts3_demand_zones
+from .public_claims import write_public_claim_gate
+from .release_gate import evaluate_release_gate, release_gate_passed, write_release_gate_report
 from .dictionary import write_data_dictionary
 from .paths import ensure_project_dirs
 from .exports import write_powerbi_exports
@@ -16,6 +24,9 @@ from .osm_plan import build_osm_tile_plan
 from .osm_extract import DEFAULT_EXTRACTS, DEFAULT_PILOT_COUNTRIES, current_osm_fetch_gate, current_osm_tile_progress, rebuild_osm_tile_execution_log_all, run_osm_pilot_smoke, run_osm_tile_batch, run_osm_tile_smoke
 from .osm_clean import build_candidate_sites_from_tile_smoke, build_existing_chargers_from_tile_smoke
 from .optimization import build_optimization_constraint_diagnostics_tile_smoke, build_optimization_results_tile_smoke, build_optimization_sensitivity_tile_smoke
+from .portfolio_release import portfolio_release_check_passed, run_portfolio_release_check, write_portfolio_release_check
+from .project_status import project_status_passed, read_project_status_report, write_project_status_report
+from .scenario_library import build_business_scenario_library_tile_smoke
 from .scenarios import build_scenario_inputs_sample, build_scenario_inputs_tile_smoke, write_service_radius_config
 from .sources import write_license_manifest
 from .transform import build_all_clean_samples, build_candidate_zone_coverage_sample
@@ -74,6 +85,22 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("build-optimization-results-tile-smoke", help="Build smoke-scope maximal coverage optimization results")
     subparsers.add_parser("build-optimization-sensitivity-tile-smoke", help="Build smoke-scope MILP sensitivity across baseline weight-set shortlists")
     subparsers.add_parser("build-optimization-diagnostics-tile-smoke", help="Build smoke-scope optimization constraint diagnostics")
+    subparsers.add_parser("build-candidate-lineage-trace-tile-smoke", help="Build an audit trace for selected Phase 5 candidate proxies")
+    subparsers.add_parser("build-optimization-zone-trace-tile-smoke", help="Build selected-site zone coverage trace rows for Phase 5 auditability")
+    subparsers.add_parser("build-optimization-country-diagnostics-tile-smoke", help="Build country-level balance diagnostics for Phase 5 optimization outputs")
+    subparsers.add_parser("build-method-comparison-narrative-tile-smoke", help="Build scenario-level narrative comparing baseline, MCLP, and min-cost methods")
+    subparsers.add_parser("build-business-scenario-library-tile-smoke", help="Build business-question framing for Phase 5 optimization scenarios")
+    subparsers.add_parser("build-pipeline-snapshot-metrics-tile-smoke", help="Build tile-smoke pipeline snapshot metrics for drift monitoring")
+    subparsers.add_parser("stage-reference-snapshot-metrics-tile-smoke", help="Stage current snapshot metrics as a reference candidate for drift checks")
+    subparsers.add_parser("compare-pipeline-snapshot-drift-tile-smoke", help="Compare current tile-smoke snapshot metrics to a reference snapshot")
+    subparsers.add_parser("promote-reference-snapshot-metrics-tile-smoke", help="Promote a staged reference only when drift checks pass")
+    subparsers.add_parser("build-public-claim-gate", help="Scan public-facing ChargeNet text for overclaim language")
+    subparsers.add_parser("run-release-gate-tile-smoke", help="Evaluate quality, drift, certification, claims, and app fallback gates")
+    subparsers.add_parser("run-portfolio-release-check", help="Run the full portfolio demo release checklist")
+    subparsers.add_parser("run-completion-gate", help="Run final local completion gate before public demo sync")
+    subparsers.add_parser("build-project-status", help="Write a recruiter-readable project status summary")
+    optimize_parser = subparsers.add_parser("optimize", help="Run a named optimization scenario")
+    optimize_parser.add_argument("--scenario", required=True, help="Named scenario slug from config/chargenet/named_optimization_scenarios.json")
     subparsers.add_parser("build-from-existing-samples", help="Rebuild clean/mart/report artifacts from existing raw samples without network fetches")
     subparsers.add_parser("run-phase3-sample", help="Run init, ingest, clean, coverage, and validation")
     return parser
@@ -270,6 +297,103 @@ def main(argv: list[str] | None = None) -> int:
         data_dictionary = write_data_dictionary()
         report = write_quality_report()
         print(json.dumps({"mart_output": str(path), "data_dictionary": str(data_dictionary), "quality_report": str(report)}, indent=2))
+        return 0
+
+    if args.command == "build-candidate-lineage-trace-tile-smoke":
+        path = build_candidate_lineage_trace_tile_smoke()
+        data_dictionary = write_data_dictionary()
+        report = write_quality_report()
+        print(json.dumps({"mart_output": str(path), "data_dictionary": str(data_dictionary), "quality_report": str(report)}, indent=2))
+        return 0
+
+    if args.command == "build-optimization-zone-trace-tile-smoke":
+        path = build_optimization_zone_trace_tile_smoke()
+        data_dictionary = write_data_dictionary()
+        report = write_quality_report()
+        print(json.dumps({"mart_output": str(path), "data_dictionary": str(data_dictionary), "quality_report": str(report)}, indent=2))
+        return 0
+
+    if args.command == "build-optimization-country-diagnostics-tile-smoke":
+        path = build_optimization_country_diagnostics_tile_smoke()
+        data_dictionary = write_data_dictionary()
+        report = write_quality_report()
+        print(json.dumps({"mart_output": str(path), "data_dictionary": str(data_dictionary), "quality_report": str(report)}, indent=2))
+        return 0
+
+    if args.command == "build-method-comparison-narrative-tile-smoke":
+        path = build_method_comparison_narrative_tile_smoke()
+        data_dictionary = write_data_dictionary()
+        report = write_quality_report()
+        print(json.dumps({"mart_output": str(path), "data_dictionary": str(data_dictionary), "quality_report": str(report)}, indent=2))
+        return 0
+
+    if args.command == "build-business-scenario-library-tile-smoke":
+        path = build_business_scenario_library_tile_smoke()
+        data_dictionary = write_data_dictionary()
+        report = write_quality_report()
+        print(json.dumps({"mart_output": str(path), "data_dictionary": str(data_dictionary), "quality_report": str(report)}, indent=2))
+        return 0
+
+    if args.command == "build-pipeline-snapshot-metrics-tile-smoke":
+        path = build_pipeline_snapshot_metrics_tile_smoke()
+        data_dictionary = write_data_dictionary()
+        report = write_quality_report()
+        print(json.dumps({"mart_output": str(path), "data_dictionary": str(data_dictionary), "quality_report": str(report)}, indent=2))
+        return 0
+
+    if args.command == "stage-reference-snapshot-metrics-tile-smoke":
+        paths = stage_reference_snapshot_metrics_tile_smoke()
+        data_dictionary = write_data_dictionary()
+        report = write_quality_report()
+        print(json.dumps({"mart_outputs": [str(path) for path in paths], "data_dictionary": str(data_dictionary), "quality_report": str(report)}, indent=2))
+        return 0
+
+    if args.command == "compare-pipeline-snapshot-drift-tile-smoke":
+        path = compare_snapshot_metrics()
+        data_dictionary = write_data_dictionary()
+        report = write_quality_report()
+        print(json.dumps({"mart_output": str(path), "data_dictionary": str(data_dictionary), "quality_report": str(report)}, indent=2))
+        return 0
+
+    if args.command == "promote-reference-snapshot-metrics-tile-smoke":
+        path = promote_reference_snapshot_metrics_tile_smoke()
+        data_dictionary = write_data_dictionary()
+        report = write_quality_report()
+        print(json.dumps({"mart_output": str(path), "data_dictionary": str(data_dictionary), "quality_report": str(report)}, indent=2))
+        return 0
+
+    if args.command == "build-public-claim-gate":
+        path = write_public_claim_gate()
+        print(json.dumps({"public_claim_gate": str(path)}, indent=2))
+        return 0
+
+    if args.command == "run-release-gate-tile-smoke":
+        rows = evaluate_release_gate()
+        path = write_release_gate_report(rows=rows)
+        print(json.dumps({"release_gate": str(path), "passed": release_gate_passed(rows)}, indent=2))
+        return 0 if release_gate_passed(rows) else 1
+
+    if args.command == "run-portfolio-release-check":
+        rows = run_portfolio_release_check()
+        path = write_portfolio_release_check(rows=rows)
+        print(json.dumps({"portfolio_release_check": str(path), "passed": portfolio_release_check_passed(rows)}, indent=2))
+        return 0 if portfolio_release_check_passed(rows) else 1
+
+    if args.command == "run-completion-gate":
+        rows = evaluate_completion_gate()
+        path = write_completion_gate(rows=rows)
+        print(json.dumps({"completion_gate": str(path), "passed": completion_gate_passed(rows)}, indent=2))
+        return 0 if completion_gate_passed(rows) else 1
+
+    if args.command == "build-project-status":
+        path = write_project_status_report()
+        rows = read_project_status_report(path)
+        print(json.dumps({"project_status": str(path), "passed": project_status_passed(rows)}, indent=2))
+        return 0 if project_status_passed(rows) else 1
+
+    if args.command == "optimize":
+        paths = build_named_optimization_scenario(args.scenario)
+        print(json.dumps({"named_optimization_outputs": [str(path) for path in paths]}, indent=2))
         return 0
 
     if args.command == "build-from-existing-samples":

@@ -205,6 +205,36 @@ def estimate_candidate_capex(candidate: dict) -> int:
     return round_to_nearest(base * risk_contingency * quality_contingency, 10000)
 
 
+def cost_proxy_explanation_rows() -> list[dict]:
+    shared_limit = "Public proxy assumption; not vendor quotes, not investment-grade, and excludes grid capacity, permits, land, traffic, utilization, and negotiated CAPEX."
+    return [
+        {
+            "cost_proxy_driver": "site_type_base",
+            "current_logic": f"fuel={CAPEX_BASE_BY_SITE_TYPE['fuel']}; services={CAPEX_BASE_BY_SITE_TYPE['services']}; default={DEFAULT_CAPEX_BASE}",
+            "why_included": "Keeps service-area and fuel-site proxies directionally different before optimization.",
+            "limitation": shared_limit,
+        },
+        {
+            "cost_proxy_driver": "rollout_risk",
+            "current_logic": "multiplier = 1 + 0.30 * rollout_risk_score",
+            "why_included": "Adds a contingency for public-proxy rollout friction already present in the candidate mart.",
+            "limitation": shared_limit,
+        },
+        {
+            "cost_proxy_driver": "data_quality",
+            "current_logic": "multiplier = 1 + 0.20 * (1 - data_quality_score)",
+            "why_included": "Penalizes lower-confidence public records so missing or weak tags do not look artificially cheap.",
+            "limitation": shared_limit,
+        },
+        {
+            "cost_proxy_driver": "rounding",
+            "current_logic": "round final proxy cost to nearest 10000",
+            "why_included": "Prevents false precision in a public-data scenario cost proxy.",
+            "limitation": shared_limit,
+        },
+    ]
+
+
 def float_or_default(value: object, default: float) -> float:
     try:
         return float(value)

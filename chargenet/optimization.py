@@ -296,11 +296,20 @@ def solve_mclp_pulp(
 
     status_code = model.solve(pulp.PULP_CBC_CMD(msg=False))
     status = pulp.LpStatus.get(status_code, str(status_code))
+    if status != "Optimal":
+        return {
+            "solver_status": f"milp_{status.lower()}",
+            "selected_candidate_ids": [],
+            "objective_covered_demand_weight": 0.0,
+            "selected_candidate_count": 0,
+            "total_candidate_cost": 0.0,
+        }
+
     selected = [candidate_id for candidate_id in candidate_ids if pulp.value(x[candidate_id]) and pulp.value(x[candidate_id]) > 0.5]
     selected.sort(key=lambda candidate_id: candidate_ids.index(candidate_id))
     objective = coverage_objective(selected, coverage_by_candidate)
     return {
-        "solver_status": "optimal_milp" if status == "Optimal" else f"milp_{status.lower()}",
+        "solver_status": "optimal_milp",
         "selected_candidate_ids": selected,
         "objective_covered_demand_weight": round(objective, 3),
         "selected_candidate_count": len(selected),

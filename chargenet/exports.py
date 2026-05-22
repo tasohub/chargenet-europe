@@ -320,6 +320,220 @@ def write_powerbi_exports(output_dir: Path | None = None) -> list[Path]:
                     ],
                 )
             )
+        if (MART_DIR / "fact_optimization_zone_trace_tile_smoke.csv").exists():
+            outputs.append(
+                write_projected_csv(
+                    MART_DIR / "fact_optimization_zone_trace_tile_smoke.csv",
+                    target_dir / "fact_optimization_zone_trace_tile_smoke.csv",
+                    [
+                        "zone_trace_id",
+                        "scenario_method_id",
+                        "scenario_id",
+                        "method_id",
+                        "selection_rank",
+                        "candidate_site_id",
+                        "demand_zone_id",
+                        "zone_coverage_rank",
+                        "coverage_radius_km",
+                        "distance_km",
+                        "zone_demand_weight",
+                        "zone_demand_share_of_candidate",
+                        "allowed_use_note",
+                        "proxy_assumption_label",
+                    ],
+                )
+            )
+        if (MART_DIR / "mart_optimization_country_diagnostics_tile_smoke.csv").exists():
+            outputs.append(
+                write_projected_csv(
+                    MART_DIR / "mart_optimization_country_diagnostics_tile_smoke.csv",
+                    target_dir / "mart_optimization_country_diagnostics_tile_smoke.csv",
+                    [
+                        "scenario_method_country_id",
+                        "scenario_method_id",
+                        "scenario_id",
+                        "method_id",
+                        "country_code",
+                        "selected_candidate_count",
+                        "covered_zone_count",
+                        "covered_demand_weight",
+                        "covered_demand_share_of_method",
+                        "total_candidate_cost",
+                        "candidate_cost_share_of_method",
+                        "concentration_status",
+                        "concentration_warning_threshold",
+                        "concentration_review_note",
+                        "diagnostic_note",
+                        "allowed_use_note",
+                        "proxy_assumption_label",
+                    ],
+                )
+            )
+        if (MART_DIR / "mart_method_comparison_narrative_tile_smoke.csv").exists():
+            outputs.append(
+                write_projected_csv(
+                    MART_DIR / "mart_method_comparison_narrative_tile_smoke.csv",
+                    target_dir / "mart_method_comparison_narrative_tile_smoke.csv",
+                    [
+                        "scenario_id",
+                        "baseline_method_id",
+                        "best_coverage_method_id",
+                        "lowest_cost_method_id",
+                        "baseline_covered_demand_weight",
+                        "mclp_covered_demand_weight",
+                        "min_cost_covered_demand_weight",
+                        "mclp_coverage_uplift_pct",
+                        "min_cost_saving_pct",
+                        "dominant_coverage_country_code",
+                        "dominant_coverage_country_share",
+                        "comparison_readout",
+                        "analyst_takeaway",
+                        "allowed_use_note",
+                        "proxy_assumption_label",
+                    ],
+                )
+            )
+        if (MART_DIR / "mart_candidate_lineage_trace_tile_smoke.csv").exists():
+            outputs.append(
+                write_projected_csv(
+                    MART_DIR / "mart_candidate_lineage_trace_tile_smoke.csv",
+                    target_dir / "mart_candidate_lineage_trace_tile_smoke.csv",
+                    [
+                        "trace_id",
+                        "scenario_id",
+                        "method_id",
+                        "selection_rank",
+                        "candidate_site_id",
+                        "source_record_id",
+                        "tile_run_id",
+                        "tile_job_id",
+                        "candidate_source",
+                        "country_code",
+                        "nuts_id",
+                        "lat",
+                        "lon",
+                        "site_type",
+                        "brand",
+                        "operator",
+                        "name",
+                        "raw_tag_keys",
+                        "baseline_rank_within_scenario",
+                        "baseline_score",
+                        "coverage_component",
+                        "data_quality_component",
+                        "risk_component",
+                        "competition_component",
+                        "action_bucket",
+                        "coverage_radius_km",
+                        "covered_zone_count",
+                        "covered_demand_weight",
+                        "coverage_trace_zone_ids",
+                        "avg_distance_covered_km",
+                        "scenario_candidate_cost",
+                        "scenario_budget",
+                        "scenario_k",
+                        "allowed_use_note",
+                        "proxy_assumption_label",
+                    ],
+                )
+            )
+        if (MART_DIR / "mart_business_scenario_library_tile_smoke.csv").exists():
+            outputs.append(
+                write_projected_csv(
+                    MART_DIR / "mart_business_scenario_library_tile_smoke.csv",
+                    target_dir / "mart_business_scenario_library_tile_smoke.csv",
+                    [
+                        "business_scenario_id",
+                        "business_scenario_name",
+                        "business_question",
+                        "scenario_id",
+                        "method_id",
+                        "solver_status",
+                        "selected_candidate_count",
+                        "primary_metric",
+                        "primary_metric_value",
+                        "covered_demand_weight",
+                        "total_candidate_cost",
+                        "comparison_label",
+                        "comparison_value",
+                        "solution_stability_signal",
+                        "limitation_note",
+                        "allowed_use_note",
+                        "proxy_assumption_label",
+                    ],
+                )
+            )
+        if (MART_DIR / "mart_pipeline_snapshot_metrics_tile_smoke.csv").exists():
+            outputs.append(
+                write_projected_csv(
+                    MART_DIR / "mart_pipeline_snapshot_metrics_tile_smoke.csv",
+                    target_dir / "mart_pipeline_snapshot_metrics_tile_smoke.csv",
+                    [
+                        "snapshot_id",
+                        "metric_name",
+                        "metric_value",
+                        "metric_unit",
+                        "source_table",
+                        "allowed_use_note",
+                        "proxy_assumption_label",
+                    ],
+                )
+            )
+        if (MART_DIR / "mart_pipeline_snapshot_metrics_reference_tile_smoke.csv").exists():
+            outputs.append(
+                write_projected_csv(
+                    MART_DIR / "mart_pipeline_snapshot_metrics_reference_tile_smoke.csv",
+                    target_dir / "mart_pipeline_snapshot_metrics_reference_tile_smoke.csv",
+                    [
+                        "snapshot_id",
+                        "metric_name",
+                        "metric_value",
+                        "metric_unit",
+                        "source_table",
+                        "allowed_use_note",
+                        "proxy_assumption_label",
+                    ],
+                )
+            )
+        if (MART_DIR / "mart_pipeline_snapshot_drift_tile_smoke.csv").exists():
+            outputs.append(
+                write_projected_csv(
+                    MART_DIR / "mart_pipeline_snapshot_drift_tile_smoke.csv",
+                    target_dir / "mart_pipeline_snapshot_drift_tile_smoke.csv",
+                    [
+                        "metric_name",
+                        "current_snapshot_id",
+                        "reference_snapshot_id",
+                        "current_metric_value",
+                        "reference_metric_value",
+                        "absolute_delta",
+                        "relative_delta_pct",
+                        "warning_threshold_pct",
+                        "fail_threshold_pct",
+                        "drift_status",
+                        "source_table",
+                        "allowed_use_note",
+                        "proxy_assumption_label",
+                    ],
+                )
+            )
+        if (MART_DIR / "mart_pipeline_snapshot_certifications_tile_smoke.csv").exists():
+            outputs.append(
+                write_projected_csv(
+                    MART_DIR / "mart_pipeline_snapshot_certifications_tile_smoke.csv",
+                    target_dir / "mart_pipeline_snapshot_certifications_tile_smoke.csv",
+                    [
+                        "reference_snapshot_id",
+                        "source_snapshot_id",
+                        "certification_status",
+                        "reviewer",
+                        "certification_note",
+                        "metric_count",
+                        "allowed_use_note",
+                        "proxy_assumption_label",
+                    ],
+                )
+            )
     outputs.extend(
         [
             write_dim_scenario(target_dir / "dim_scenario.csv"),
@@ -402,6 +616,23 @@ def write_relationships(target: Path, *, include_tile_smoke: bool = False, inclu
                 relationship("fact_optimization_selected_sites_tile_smoke", "scenario_method_id", "mart_optimization_results_tile_smoke", "scenario_method_id", "many-to-one"),
             ]
         )
+    if (MART_DIR / "fact_optimization_zone_trace_tile_smoke.csv").exists():
+        rows.extend(
+            [
+                relationship("fact_optimization_zone_trace_tile_smoke", "candidate_site_id", "dim_candidate_site_tile_smoke", "candidate_site_id", "many-to-one"),
+                relationship("fact_optimization_zone_trace_tile_smoke", "scenario_id", "dim_scenario", "scenario_id", "many-to-one"),
+                relationship("fact_optimization_zone_trace_tile_smoke", "scenario_method_id", "mart_optimization_results_tile_smoke", "scenario_method_id", "many-to-one"),
+            ]
+        )
+    if (MART_DIR / "mart_optimization_country_diagnostics_tile_smoke.csv").exists():
+        rows.extend(
+            [
+                relationship("mart_optimization_country_diagnostics_tile_smoke", "scenario_id", "dim_scenario", "scenario_id", "many-to-one"),
+                relationship("mart_optimization_country_diagnostics_tile_smoke", "scenario_method_id", "mart_optimization_results_tile_smoke", "scenario_method_id", "many-to-one"),
+            ]
+        )
+    if (MART_DIR / "mart_method_comparison_narrative_tile_smoke.csv").exists():
+        rows.append(relationship("mart_method_comparison_narrative_tile_smoke", "scenario_id", "dim_scenario", "scenario_id", "many-to-one"))
     fieldnames = ["from_table", "from_column", "to_table", "to_column", "cardinality", "cross_filter", "active", "model_note"]
     with target.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
@@ -452,6 +683,12 @@ def write_manifest(target: Path, *, include_tile_smoke: bool = False, include_ti
             tables.append("mart_optimization_constraint_diagnostics_tile_smoke")
         if (MART_DIR / "fact_optimization_selected_sites_tile_smoke.csv").exists():
             tables.append("fact_optimization_selected_sites_tile_smoke")
+        if (MART_DIR / "fact_optimization_zone_trace_tile_smoke.csv").exists():
+            tables.append("fact_optimization_zone_trace_tile_smoke")
+        if (MART_DIR / "mart_optimization_country_diagnostics_tile_smoke.csv").exists():
+            tables.append("mart_optimization_country_diagnostics_tile_smoke")
+        if (MART_DIR / "mart_method_comparison_narrative_tile_smoke.csv").exists():
+            tables.append("mart_method_comparison_narrative_tile_smoke")
     payload = {
         "export_schema_version": "powerbi_sample_v1",
         "generated_at_utc": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),

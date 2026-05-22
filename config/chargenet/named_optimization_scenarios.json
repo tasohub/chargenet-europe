@@ -1,0 +1,59 @@
+[
+  {
+    "scenario_slug": "highway-corridor-focus",
+    "named_scenario_id": "named-scenario:highway-corridor-focus",
+    "scenario_name": "Highway corridor focus",
+    "business_framing": "Prioritize candidate proxies that look closer to highway service-area use cases, then let the MILP spread selected sites for unique NUTS3 demand coverage.",
+    "base_scenario_id": "scenario:radius-base",
+    "candidate_pool_size": 160,
+    "filters": {
+      "pool_rule": "top candidates by highway-corridor priority score",
+      "preferred_osm_tags": ["highway=services", "atmotorway"],
+      "preferred_site_type": "services"
+    },
+    "priority_weights": {
+      "baseline_score": 0.3,
+      "coverage_component": 0.2,
+      "highway_corridor_proxy": 0.45,
+      "data_quality_component": 0.05
+    }
+  },
+  {
+    "scenario_slug": "rural-underserved",
+    "named_scenario_id": "named-scenario:rural-underserved",
+    "scenario_name": "Rural underserved",
+    "business_framing": "Bias the candidate pool toward lower-population zones and zones with weaker observed charger density, then optimize for unique covered demand inside that pool.",
+    "base_scenario_id": "scenario:radius-base",
+    "candidate_pool_size": 160,
+    "filters": {
+      "pool_rule": "top candidates by rural underserved priority score",
+      "rural_proxy": "inverse NUTS3 population within the four-country pilot",
+      "underserved_proxy": "inverse observed OSM charger density per 100k residents"
+    },
+    "priority_weights": {
+      "baseline_score": 0.25,
+      "coverage_component": 0.2,
+      "low_population_proxy": 0.25,
+      "charger_gap_proxy": 0.3
+    }
+  },
+  {
+    "scenario_slug": "competitor-gap-focused",
+    "named_scenario_id": "named-scenario:competitor-gap-focused",
+    "scenario_name": "Competitor-gap focused",
+    "business_framing": "Bias toward high-demand zones where the public charger-density proxy is weakest, then test whether MILP can cover more demand than a simple ranked shortlist.",
+    "base_scenario_id": "scenario:radius-base",
+    "candidate_pool_size": 160,
+    "filters": {
+      "pool_rule": "top candidates by high-demand charger-gap priority score",
+      "competitor_gap_proxy": "high population times inverse observed OSM charger density",
+      "market_share_caveat": "not true competitor market share"
+    },
+    "priority_weights": {
+      "baseline_score": 0.25,
+      "coverage_component": 0.25,
+      "high_demand_gap_proxy": 0.4,
+      "competition_component": 0.1
+    }
+  }
+]

@@ -1,0 +1,28 @@
+{
+  "default": {
+    "warning_pct": 0.1,
+    "fail_pct": 0.25
+  },
+  "metrics": {
+    "candidate_site_count": {
+      "warning_pct": 0.15,
+      "fail_pct": 0.35
+    },
+    "coverage_row_count": {
+      "warning_pct": 0.15,
+      "fail_pct": 0.35
+    },
+    "eligible_coverage_pair_count": {
+      "warning_pct": 0.2,
+      "fail_pct": 0.4
+    },
+    "optimization_objective_mclp_base": {
+      "warning_pct": 0.05,
+      "fail_pct": 0.15
+    },
+    "optimization_cost_mclp_base": {
+      "warning_pct": 0.05,
+      "fail_pct": 0.15
+    }
+  }
+}

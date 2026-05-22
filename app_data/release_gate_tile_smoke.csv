@@ -1,0 +1,7 @@
+gate_name,gate_status,evidence_path,blocker_count,detail
+quality_report,pass,reports/chargenet/phase3_sample_quality_report.json,0,Raw and clean/mart quality report passed.
+snapshot_drift,pass,data/chargenet/marts/mart_pipeline_snapshot_drift_tile_smoke.csv,0,7 drift metrics passed.
+snapshot_certification,pass,data/chargenet/marts/mart_pipeline_snapshot_certifications_tile_smoke.csv,0,Demo drift reference is certified.
+public_claims,pass,reports/chargenet/public_claim_gate.csv,0,No public overclaim findings.
+app_fallback_sync,pass,app_data/pipeline_snapshot_certifications_tile_smoke.csv,0,App fallback certification matches mart certification.
+app_data_manifest,pass,app_data/manifest.json,0,13/13 app_data files match manifest row counts and required columns.

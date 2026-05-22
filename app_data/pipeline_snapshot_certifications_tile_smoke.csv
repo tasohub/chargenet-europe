@@ -1,0 +1,2 @@
+reference_snapshot_id,source_snapshot_id,certification_status,reviewer,certification_note,metric_count,allowed_use_note,proxy_assumption_label
+tile_smoke_reference_candidate,tile_smoke_current,certified,codex-local-qa-gate,Certified by explicit promotion gate: all drift checks passed across 7 metrics.,7,Certified reference snapshot for tile-smoke drift checks; still not investment advice.,tile_smoke_snapshot_promotion_gate

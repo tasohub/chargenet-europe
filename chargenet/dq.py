@@ -90,6 +90,14 @@ def validate_clean_samples() -> dict:
     checks.extend(validate_optional_baseline_sensitivity_tile_smoke())
     checks.extend(validate_optional_optimization_sensitivity_tile_smoke())
     checks.extend(validate_optional_optimization_results_tile_smoke())
+    checks.extend(validate_optional_optimization_zone_trace_tile_smoke())
+    checks.extend(validate_optional_optimization_country_diagnostics_tile_smoke())
+    checks.extend(validate_optional_method_comparison_narrative_tile_smoke())
+    checks.extend(validate_optional_candidate_lineage_trace_tile_smoke())
+    checks.extend(validate_optional_business_scenario_library_tile_smoke())
+    checks.extend(validate_optional_pipeline_snapshot_metrics_tile_smoke())
+    checks.extend(validate_optional_pipeline_snapshot_drift_tile_smoke())
+    checks.extend(validate_optional_pipeline_snapshot_certification_tile_smoke())
     return summarize_checks(checks)
 
 
@@ -1187,6 +1195,7 @@ def validate_optional_optimization_results_tile_smoke() -> list[dict]:
     summary_scenario_method_ids = {row["scenario_method_id"] for row in summary_rows}
     selected_scenario_method_ids = {row["scenario_method_id"] for row in selected_rows}
     diagnostics_scenario_method_ids = {row["scenario_method_id"] for row in diagnostics_rows}
+    reconciliation_errors = selected_site_reconciliation_errors(summary_rows, selected_rows)
     checks.extend(
         [
             {
@@ -1218,6 +1227,12 @@ def validate_optional_optimization_results_tile_smoke() -> list[dict]:
                 "path": str(selected_path.as_posix()),
                 "passed": {row["candidate_site_id"] for row in selected_rows}.issubset(candidate_ids),
                 "detail": f"{len(candidate_ids)} known smoke candidates",
+            },
+            {
+                "check": "optimization_selected_sites_reconcile_summary",
+                "path": str(selected_path.as_posix()),
+                "passed": not reconciliation_errors,
+                "detail": "selected-site count and cost reconcile to summary rows" if not reconciliation_errors else "; ".join(reconciliation_errors[:10]),
             },
             {
                 "check": "optimization_budget_constraint",
@@ -1278,6 +1293,720 @@ def validate_optional_optimization_results_tile_smoke() -> list[dict]:
                 "path": str(summary_path.as_posix()),
                 "passed": not any(("build" + " now") in row.get("allowed_use_note", "").lower() or ("depl" + "oy") in row.get("allowed_use_note", "").lower() for row in summary_rows + selected_rows + diagnostics_rows),
                 "detail": "optimization output uses diligence language",
+            },
+        ]
+    )
+    return checks
+
+
+def selected_site_reconciliation_errors(summary_rows: list[dict], selected_rows: list[dict], *, cost_tolerance: float = 0.01) -> list[str]:
+    errors = []
+    selected_by_method: dict[str, list[dict]] = {}
+    for row in selected_rows:
+        selected_by_method.setdefault(str(row.get("scenario_method_id") or ""), []).append(row)
+
+    seen_selected_keys = set()
+    for row in selected_rows:
+        selected_key = (row.get("scenario_method_id"), row.get("candidate_site_id"))
+        if selected_key in seen_selected_keys:
+            errors.append(f"{row.get('scenario_method_id')} duplicate selected candidate {row.get('candidate_site_id')}")
+        seen_selected_keys.add(selected_key)
+
+    for summary in summary_rows:
+        scenario_method_id = str(summary.get("scenario_method_id") or "")
+        selected = selected_by_method.get(scenario_method_id, [])
+        expected_count = int(round(safe_float(summary.get("selected_candidate_count"))))
+        actual_count = len(selected)
+        if actual_count != expected_count:
+            errors.append(f"{scenario_method_id} count mismatch: summary {expected_count}, selected rows {actual_count}")
+
+        expected_cost = round(safe_float(summary.get("total_candidate_cost")), 2)
+        actual_cost = round(sum(safe_float(row.get("c_j")) for row in selected), 2)
+        if abs(actual_cost - expected_cost) > cost_tolerance:
+            errors.append(f"{scenario_method_id} cost mismatch: summary {expected_cost:.2f}, selected rows {actual_cost:.2f}")
+
+        ranks = sorted(int(round(safe_float(row.get("selection_rank")))) for row in selected)
+        expected_ranks = list(range(1, actual_count + 1))
+        if ranks != expected_ranks:
+            errors.append(f"{scenario_method_id} rank sequence mismatch: expected {expected_ranks}, found {ranks}")
+
+    known_summary_ids = {str(row.get("scenario_method_id") or "") for row in summary_rows}
+    for scenario_method_id in selected_by_method:
+        if scenario_method_id not in known_summary_ids:
+            errors.append(f"{scenario_method_id} selected rows have no summary row")
+    return errors
+
+
+def validate_optional_candidate_lineage_trace_tile_smoke() -> list[dict]:
+    path = CLEAN_DIR.parent / "marts" / "mart_candidate_lineage_trace_tile_smoke.csv"
+    if not path.exists():
+        return []
+    checks = []
+    checks.extend(
+        validate_csv_required_fields(
+            path,
+            [
+                "trace_id",
+                "scenario_id",
+                "method_id",
+                "selection_rank",
+                "candidate_site_id",
+                "source_record_id",
+                "tile_run_id",
+                "tile_job_id",
+                "raw_tag_keys",
+                "baseline_rank_within_scenario",
+                "baseline_score",
+                "coverage_radius_km",
+                "covered_zone_count",
+                "covered_demand_weight",
+                "coverage_trace_zone_ids",
+                "scenario_candidate_cost",
+                "allowed_use_note",
+                "proxy_assumption_label",
+            ],
+            not_blank_fields=[
+                "trace_id",
+                "scenario_id",
+                "method_id",
+                "selection_rank",
+                "candidate_site_id",
+                "source_record_id",
+                "tile_run_id",
+                "tile_job_id",
+                "baseline_rank_within_scenario",
+                "baseline_score",
+                "coverage_radius_km",
+                "covered_zone_count",
+                "covered_demand_weight",
+                "scenario_candidate_cost",
+                "allowed_use_note",
+                "proxy_assumption_label",
+            ],
+        )
+    )
+    rows = read_csv_rows(path)
+    trace_ids = {row["trace_id"] for row in rows}
+    candidate_ids = {row["candidate_site_id"] for row in read_csv_rows(CLEAN_DIR / "clean_candidate_sites_tile_smoke.csv")}
+    selected_keys = {
+        (row["scenario_id"], row["method_id"], row["candidate_site_id"])
+        for row in read_csv_rows(CLEAN_DIR.parent / "marts" / "fact_optimization_selected_sites_tile_smoke.csv")
+    }
+    checks.extend(
+        [
+            {
+                "check": "candidate_lineage_trace_grain_unique",
+                "path": str(path.as_posix()),
+                "passed": len(trace_ids) == len(rows),
+                "detail": "one trace row per scenario, method, and candidate",
+            },
+            {
+                "check": "candidate_lineage_trace_candidate_fk",
+                "path": str(path.as_posix()),
+                "passed": {row["candidate_site_id"] for row in rows}.issubset(candidate_ids),
+                "detail": f"{len(candidate_ids)} known tile-smoke candidates",
+            },
+            {
+                "check": "candidate_lineage_trace_selected_site_fk",
+                "path": str(path.as_posix()),
+                "passed": {
+                    (row["scenario_id"], row["method_id"], row["candidate_site_id"])
+                    for row in rows
+                }.issubset(selected_keys),
+                "detail": f"{len(selected_keys)} selected scenario-method-candidate keys",
+            },
+            {
+                "check": "candidate_lineage_trace_numeric_ranges",
+                "path": str(path.as_posix()),
+                "passed": all(
+                    int(float(row["selection_rank"])) >= 1
+                    and int(float(row["covered_zone_count"])) >= 0
+                    and float(row["covered_demand_weight"]) >= 0
+                    and float(row["scenario_candidate_cost"]) >= 0
+                    for row in rows
+                ),
+                "detail": "rank, coverage, and cost fields checked",
+            },
+            {
+                "check": "candidate_lineage_trace_no_build_language",
+                "path": str(path.as_posix()),
+                "passed": not any(("build" + " now") in row.get("allowed_use_note", "").lower() or ("depl" + "oy") in row.get("allowed_use_note", "").lower() for row in rows),
+                "detail": "lineage output uses diligence language",
+            },
+        ]
+    )
+    return checks
+
+
+def validate_optional_optimization_zone_trace_tile_smoke() -> list[dict]:
+    path = CLEAN_DIR.parent / "marts" / "fact_optimization_zone_trace_tile_smoke.csv"
+    if not path.exists():
+        return []
+    checks = []
+    checks.extend(
+        validate_csv_required_fields(
+            path,
+            [
+                "zone_trace_id",
+                "scenario_method_id",
+                "scenario_id",
+                "method_id",
+                "selection_rank",
+                "candidate_site_id",
+                "demand_zone_id",
+                "zone_coverage_rank",
+                "coverage_radius_km",
+                "distance_km",
+                "zone_demand_weight",
+                "zone_demand_share_of_candidate",
+                "allowed_use_note",
+                "proxy_assumption_label",
+            ],
+            not_blank_fields=[
+                "zone_trace_id",
+                "scenario_method_id",
+                "scenario_id",
+                "method_id",
+                "selection_rank",
+                "candidate_site_id",
+                "demand_zone_id",
+                "zone_coverage_rank",
+                "coverage_radius_km",
+                "distance_km",
+                "zone_demand_weight",
+                "zone_demand_share_of_candidate",
+                "allowed_use_note",
+                "proxy_assumption_label",
+            ],
+        )
+    )
+    rows = read_csv_rows(path)
+    trace_ids = {row["zone_trace_id"] for row in rows}
+    selected_keys = {
+        (row["scenario_id"], row["method_id"], row["candidate_site_id"])
+        for row in read_csv_rows(CLEAN_DIR.parent / "marts" / "fact_optimization_selected_sites_tile_smoke.csv")
+    }
+    coverage_keys = {
+        (row["candidate_site_id"], row["demand_zone_id"], row["coverage_radius_km"])
+        for row in read_csv_rows(CLEAN_DIR.parent / "marts" / "fact_candidate_zone_coverage_tile_smoke.csv")
+        if int(float(row.get("pair_eligible_flag") or 0)) == 1
+    }
+    checks.extend(
+        [
+            {
+                "check": "optimization_zone_trace_grain_unique",
+                "path": str(path.as_posix()),
+                "passed": len(trace_ids) == len(rows),
+                "detail": "one trace row per scenario, method, selected candidate, and demand zone",
+            },
+            {
+                "check": "optimization_zone_trace_selected_site_fk",
+                "path": str(path.as_posix()),
+                "passed": {
+                    (row["scenario_id"], row["method_id"], row["candidate_site_id"])
+                    for row in rows
+                }.issubset(selected_keys),
+                "detail": f"{len(selected_keys)} selected scenario-method-candidate keys",
+            },
+            {
+                "check": "optimization_zone_trace_coverage_fk",
+                "path": str(path.as_posix()),
+                "passed": {
+                    (row["candidate_site_id"], row["demand_zone_id"], row["coverage_radius_km"])
+                    for row in rows
+                }.issubset(coverage_keys),
+                "detail": f"{len(coverage_keys)} eligible candidate-zone-radius coverage keys",
+            },
+            {
+                "check": "optimization_zone_trace_numeric_ranges",
+                "path": str(path.as_posix()),
+                "passed": all(
+                    int(float(row["selection_rank"])) >= 1
+                    and int(float(row["zone_coverage_rank"])) >= 1
+                    and float(row["distance_km"]) >= 0
+                    and float(row["zone_demand_weight"]) >= 0
+                    and 0 <= float(row["zone_demand_share_of_candidate"]) <= 1
+                    for row in rows
+                ),
+                "detail": "rank, distance, demand, and share fields checked",
+            },
+            {
+                "check": "optimization_zone_trace_no_build_language",
+                "path": str(path.as_posix()),
+                "passed": not any(("build" + " now") in row.get("allowed_use_note", "").lower() or ("depl" + "oy") in row.get("allowed_use_note", "").lower() for row in rows),
+                "detail": "zone trace output uses diligence language",
+            },
+        ]
+    )
+    return checks
+
+
+def validate_optional_optimization_country_diagnostics_tile_smoke() -> list[dict]:
+    path = CLEAN_DIR.parent / "marts" / "mart_optimization_country_diagnostics_tile_smoke.csv"
+    if not path.exists():
+        return []
+    checks = []
+    checks.extend(
+        validate_csv_required_fields(
+            path,
+            [
+                "scenario_method_country_id",
+                "scenario_method_id",
+                "scenario_id",
+                "method_id",
+                "country_code",
+                "selected_candidate_count",
+                "covered_zone_count",
+                "covered_demand_weight",
+                "covered_demand_share_of_method",
+                "total_candidate_cost",
+                "candidate_cost_share_of_method",
+                "concentration_status",
+                "concentration_warning_threshold",
+                "concentration_review_note",
+                "diagnostic_note",
+                "allowed_use_note",
+                "proxy_assumption_label",
+            ],
+            not_blank_fields=[
+                "scenario_method_country_id",
+                "scenario_method_id",
+                "scenario_id",
+                "method_id",
+                "country_code",
+                "selected_candidate_count",
+                "covered_zone_count",
+                "covered_demand_weight",
+                "covered_demand_share_of_method",
+                "total_candidate_cost",
+                "candidate_cost_share_of_method",
+                "concentration_status",
+                "concentration_warning_threshold",
+                "concentration_review_note",
+                "diagnostic_note",
+                "allowed_use_note",
+                "proxy_assumption_label",
+            ],
+        )
+    )
+    rows = read_csv_rows(path)
+    row_ids = {row["scenario_method_country_id"] for row in rows}
+    method_keys = {(row["scenario_id"], row["method_id"]) for row in read_csv_rows(CLEAN_DIR.parent / "marts" / "mart_optimization_results_tile_smoke.csv")}
+    checks.extend(
+        [
+            {
+                "check": "optimization_country_diagnostics_grain_unique",
+                "path": str(path.as_posix()),
+                "passed": len(row_ids) == len(rows),
+                "detail": "one country diagnostic row per scenario, method, and country",
+            },
+            {
+                "check": "optimization_country_diagnostics_method_fk",
+                "path": str(path.as_posix()),
+                "passed": {(row["scenario_id"], row["method_id"]) for row in rows}.issubset(method_keys),
+                "detail": f"{len(method_keys)} known scenario-method optimization rows",
+            },
+            {
+                "check": "optimization_country_diagnostics_numeric_ranges",
+                "path": str(path.as_posix()),
+                "passed": all(
+                    int(float(row["selected_candidate_count"])) >= 0
+                    and int(float(row["covered_zone_count"])) >= 0
+                    and float(row["covered_demand_weight"]) >= 0
+                    and 0 <= float(row["covered_demand_share_of_method"]) <= 1
+                    and float(row["total_candidate_cost"]) >= 0
+                    and 0 <= float(row["candidate_cost_share_of_method"]) <= 1
+                    for row in rows
+                ),
+                "detail": "country diagnostic count, coverage, cost, and share fields checked",
+            },
+            {
+                "check": "optimization_country_diagnostics_no_build_language",
+                "path": str(path.as_posix()),
+                "passed": not any(("build" + " now") in row.get("allowed_use_note", "").lower() or ("depl" + "oy") in row.get("allowed_use_note", "").lower() for row in rows),
+                "detail": "country diagnostics use diligence language",
+            },
+            {
+                "check": "optimization_country_diagnostics_concentration_status",
+                "path": str(path.as_posix()),
+                "passed": country_concentration_statuses_match_threshold(rows),
+                "detail": "country concentration warning status matches the configured threshold",
+            },
+            {
+                "check": "optimization_country_diagnostics_concentration_review",
+                "path": str(path.as_posix()),
+                "passed": True,
+                "detail": country_concentration_review(rows)[1],
+            },
+            {
+                "check": "optimization_country_diagnostics_share_sum",
+                "path": str(path.as_posix()),
+                "passed": country_share_sums_valid(rows),
+                "detail": "country demand shares sum to 1.0 per scenario-method when traced demand is positive",
+            },
+        ]
+    )
+    return checks
+
+
+def country_concentration_review(rows: list[dict], *, warning_threshold: float = 0.75) -> tuple[int, str]:
+    warning_count = sum(1 for row in rows if safe_float(row.get("covered_demand_share_of_method")) >= warning_threshold)
+    if warning_count:
+        return (
+            warning_count,
+            f"{warning_count} warning-grade country concentration row(s); this does not fail the gate because concentration can be a valid optimization outcome.",
+        )
+    return (0, "No warning-grade country concentration rows; review still remains analytical, not a rollout recommendation.")
+
+
+def country_concentration_statuses_match_threshold(rows: list[dict], *, warning_threshold: float = 0.75) -> bool:
+    for row in rows:
+        share = safe_float(row.get("covered_demand_share_of_method"))
+        expected = "warning" if share >= warning_threshold else "pass"
+        if row.get("concentration_status") != expected:
+            return False
+    return True
+
+
+def country_share_sums_valid(rows: list[dict], *, tolerance: float = 0.000005) -> bool:
+    by_method: dict[str, float] = {}
+    for row in rows:
+        scenario_method_id = row.get("scenario_method_id") or f"{row.get('scenario_id')}|{row.get('method_id')}"
+        by_method[scenario_method_id] = by_method.get(scenario_method_id, 0.0) + safe_float(row.get("covered_demand_share_of_method"))
+    return all(abs(total - 1.0) <= tolerance or abs(total) <= tolerance for total in by_method.values())
+
+
+def safe_float(value: object) -> float:
+    try:
+        return float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def validate_optional_method_comparison_narrative_tile_smoke() -> list[dict]:
+    path = CLEAN_DIR.parent / "marts" / "mart_method_comparison_narrative_tile_smoke.csv"
+    if not path.exists():
+        return []
+    checks = []
+    checks.extend(
+        validate_csv_required_fields(
+            path,
+            [
+                "scenario_id",
+                "baseline_method_id",
+                "best_coverage_method_id",
+                "lowest_cost_method_id",
+                "baseline_covered_demand_weight",
+                "mclp_covered_demand_weight",
+                "min_cost_covered_demand_weight",
+                "mclp_coverage_uplift_pct",
+                "min_cost_saving_pct",
+                "comparison_readout",
+                "analyst_takeaway",
+                "allowed_use_note",
+                "proxy_assumption_label",
+            ],
+            not_blank_fields=[
+                "scenario_id",
+                "baseline_method_id",
+                "best_coverage_method_id",
+                "lowest_cost_method_id",
+                "comparison_readout",
+                "analyst_takeaway",
+                "allowed_use_note",
+                "proxy_assumption_label",
+            ],
+        )
+    )
+    rows = read_csv_rows(path)
+    scenario_ids = {row["scenario_id"] for row in rows}
+    known_scenario_ids = {row["scenario_id"] for row in read_csv_rows(CLEAN_DIR.parent / "marts" / "mart_optimization_results_tile_smoke.csv")}
+    checks.extend(
+        [
+            {
+                "check": "method_comparison_narrative_grain_unique",
+                "path": str(path.as_posix()),
+                "passed": len(scenario_ids) == len(rows),
+                "detail": "one method-comparison narrative row per scenario",
+            },
+            {
+                "check": "method_comparison_narrative_scenario_fk",
+                "path": str(path.as_posix()),
+                "passed": scenario_ids.issubset(known_scenario_ids),
+                "detail": f"{len(known_scenario_ids)} known optimization scenarios",
+            },
+            {
+                "check": "method_comparison_narrative_numeric_ranges",
+                "path": str(path.as_posix()),
+                "passed": all(
+                    float(row["baseline_covered_demand_weight"]) >= 0
+                    and float(row["mclp_covered_demand_weight"]) >= 0
+                    and float(row["min_cost_covered_demand_weight"]) >= 0
+                    and 0 <= float(row.get("dominant_coverage_country_share") or 0) <= 1
+                    for row in rows
+                ),
+                "detail": "covered demand and dominant-country share fields checked",
+            },
+            {
+                "check": "method_comparison_narrative_no_build_language",
+                "path": str(path.as_posix()),
+                "passed": not any(("build" + " now") in row.get("allowed_use_note", "").lower() or ("depl" + "oy") in row.get("allowed_use_note", "").lower() for row in rows),
+                "detail": "method comparison narrative uses diligence language",
+            },
+        ]
+    )
+    return checks
+
+
+def validate_optional_business_scenario_library_tile_smoke() -> list[dict]:
+    path = CLEAN_DIR.parent / "marts" / "mart_business_scenario_library_tile_smoke.csv"
+    if not path.exists():
+        return []
+    checks = []
+    checks.extend(
+        validate_csv_required_fields(
+            path,
+            [
+                "business_scenario_id",
+                "business_scenario_name",
+                "business_question",
+                "scenario_id",
+                "method_id",
+                "solver_status",
+                "primary_metric",
+                "primary_metric_value",
+                "decision_readout",
+                "recommended_next_action",
+                "limitation_note",
+                "allowed_use_note",
+                "proxy_assumption_label",
+            ],
+            not_blank_fields=[
+                "business_scenario_id",
+                "business_scenario_name",
+                "business_question",
+                "scenario_id",
+                "method_id",
+                "solver_status",
+                "primary_metric",
+                "primary_metric_value",
+                "decision_readout",
+                "recommended_next_action",
+                "limitation_note",
+                "allowed_use_note",
+                "proxy_assumption_label",
+            ],
+        )
+    )
+    rows = read_csv_rows(path)
+    scenario_ids = {row["scenario_id"] for row in read_csv_rows(CLEAN_DIR.parent / "marts" / "mart_optimization_results_tile_smoke.csv")}
+    scenario_ids.update(row["scenario_id"] for row in read_csv_rows(CLEAN_DIR.parent / "marts" / "mart_optimization_sensitivity_tile_smoke.csv"))
+    business_ids = {row["business_scenario_id"] for row in rows}
+    checks.extend(
+        [
+            {
+                "check": "business_scenario_library_minimum_count",
+                "path": str(path.as_posix()),
+                "passed": len(rows) >= 5,
+                "detail": f"{len(rows)} business scenarios",
+            },
+            {
+                "check": "business_scenario_library_grain_unique",
+                "path": str(path.as_posix()),
+                "passed": len(business_ids) == len(rows),
+                "detail": "one row per business scenario",
+            },
+            {
+                "check": "business_scenario_library_scenario_fk",
+                "path": str(path.as_posix()),
+                "passed": {row["scenario_id"] for row in rows}.issubset(scenario_ids),
+                "detail": f"{len(scenario_ids)} known optimization scenario ids",
+            },
+            {
+                "check": "business_scenario_library_metric_nonnegative",
+                "path": str(path.as_posix()),
+                "passed": all(float(row["primary_metric_value"]) >= 0 for row in rows),
+                "detail": "primary metric values checked",
+            },
+            {
+                "check": "business_scenario_library_limitations_present",
+                "path": str(path.as_posix()),
+                "passed": all("public proxy" in row["limitation_note"].lower() for row in rows),
+                "detail": "public-proxy limitation language checked",
+            },
+            {
+                "check": "business_scenario_library_no_build_language",
+                "path": str(path.as_posix()),
+                "passed": not any(("build" + " now") in row.get("allowed_use_note", "").lower() or ("depl" + "oy") in row.get("allowed_use_note", "").lower() for row in rows),
+                "detail": "business scenario output uses diligence language",
+            },
+        ]
+    )
+    return checks
+
+
+def validate_optional_pipeline_snapshot_metrics_tile_smoke() -> list[dict]:
+    path = CLEAN_DIR.parent / "marts" / "mart_pipeline_snapshot_metrics_tile_smoke.csv"
+    if not path.exists():
+        return []
+    checks = []
+    checks.extend(
+        validate_csv_required_fields(
+            path,
+            ["snapshot_id", "metric_name", "metric_value", "metric_unit", "source_table", "allowed_use_note", "proxy_assumption_label"],
+            not_blank_fields=["snapshot_id", "metric_name", "metric_value", "metric_unit", "source_table", "allowed_use_note", "proxy_assumption_label"],
+        )
+    )
+    rows = read_csv_rows(path)
+    metric_names = {row["metric_name"] for row in rows}
+    required_metrics = {"candidate_site_count", "coverage_row_count", "eligible_coverage_pair_count", "baseline_score_row_count", "optimization_summary_row_count"}
+    checks.extend(
+        [
+            {
+                "check": "pipeline_snapshot_metrics_required_set",
+                "path": str(path.as_posix()),
+                "passed": required_metrics.issubset(metric_names),
+                "detail": f"{len(metric_names)} metrics present",
+            },
+            {
+                "check": "pipeline_snapshot_metrics_grain_unique",
+                "path": str(path.as_posix()),
+                "passed": len({(row["snapshot_id"], row["metric_name"]) for row in rows}) == len(rows),
+                "detail": "one row per snapshot and metric",
+            },
+            {
+                "check": "pipeline_snapshot_metrics_nonnegative",
+                "path": str(path.as_posix()),
+                "passed": all(float(row["metric_value"]) >= 0 for row in rows),
+                "detail": "metric values checked",
+            },
+        ]
+    )
+    return checks
+
+
+def validate_optional_pipeline_snapshot_drift_tile_smoke() -> list[dict]:
+    path = CLEAN_DIR.parent / "marts" / "mart_pipeline_snapshot_drift_tile_smoke.csv"
+    if not path.exists():
+        return []
+    checks = []
+    checks.extend(
+        validate_csv_required_fields(
+            path,
+            [
+                "metric_name",
+                "current_snapshot_id",
+                "reference_snapshot_id",
+                "current_metric_value",
+                "reference_metric_value",
+                "absolute_delta",
+                "relative_delta_pct",
+                "warning_threshold_pct",
+                "fail_threshold_pct",
+                "drift_status",
+                "source_table",
+                "allowed_use_note",
+                "proxy_assumption_label",
+            ],
+            not_blank_fields=[
+                "metric_name",
+                "current_snapshot_id",
+                "reference_snapshot_id",
+                "current_metric_value",
+                "reference_metric_value",
+                "absolute_delta",
+                "relative_delta_pct",
+                "warning_threshold_pct",
+                "fail_threshold_pct",
+                "drift_status",
+                "source_table",
+                "allowed_use_note",
+                "proxy_assumption_label",
+            ],
+        )
+    )
+    rows = read_csv_rows(path)
+    checks.extend(
+        [
+            {
+                "check": "pipeline_snapshot_drift_status_values",
+                "path": str(path.as_posix()),
+                "passed": all(row["drift_status"] in {"pass", "warning", "fail"} for row in rows),
+                "detail": "drift statuses checked",
+            },
+            {
+                "check": "pipeline_snapshot_drift_threshold_order",
+                "path": str(path.as_posix()),
+                "passed": all(float(row["warning_threshold_pct"]) <= float(row["fail_threshold_pct"]) for row in rows),
+                "detail": "warning and fail thresholds checked",
+            },
+            {
+                "check": "pipeline_snapshot_drift_no_build_language",
+                "path": str(path.as_posix()),
+                "passed": not any(("build" + " now") in row.get("allowed_use_note", "").lower() or ("depl" + "oy") in row.get("allowed_use_note", "").lower() for row in rows),
+                "detail": "snapshot drift output uses review language",
+            },
+        ]
+    )
+    return checks
+
+
+def validate_optional_pipeline_snapshot_certification_tile_smoke() -> list[dict]:
+    reference_path = CLEAN_DIR.parent / "marts" / "mart_pipeline_snapshot_metrics_reference_tile_smoke.csv"
+    log_path = CLEAN_DIR.parent / "marts" / "mart_pipeline_snapshot_certifications_tile_smoke.csv"
+    if not reference_path.exists() and not log_path.exists():
+        return []
+    checks = []
+    checks.extend(
+        validate_csv_required_fields(
+            reference_path,
+            ["snapshot_id", "metric_name", "metric_value", "metric_unit", "source_table", "allowed_use_note", "proxy_assumption_label"],
+            not_blank_fields=["snapshot_id", "metric_name", "metric_value", "metric_unit", "source_table", "allowed_use_note", "proxy_assumption_label"],
+        )
+    )
+    checks.extend(
+        validate_csv_required_fields(
+            log_path,
+            ["reference_snapshot_id", "source_snapshot_id", "certification_status", "reviewer", "certification_note", "metric_count", "allowed_use_note", "proxy_assumption_label"],
+            not_blank_fields=["reference_snapshot_id", "source_snapshot_id", "certification_status", "reviewer", "certification_note", "metric_count", "allowed_use_note", "proxy_assumption_label"],
+        )
+    )
+    if not (reference_path.exists() and log_path.exists()):
+        return checks
+    reference_rows = read_csv_rows(reference_path)
+    log_rows = read_csv_rows(log_path)
+    reference_snapshot_ids = {row["snapshot_id"] for row in reference_rows}
+    checks.extend(
+        [
+            {
+                "check": "pipeline_snapshot_reference_grain_unique",
+                "path": str(reference_path.as_posix()),
+                "passed": len({(row["snapshot_id"], row["metric_name"]) for row in reference_rows}) == len(reference_rows),
+                "detail": "one reference row per snapshot and metric",
+            },
+            {
+                "check": "pipeline_snapshot_reference_metric_values_nonnegative",
+                "path": str(reference_path.as_posix()),
+                "passed": all(float(row["metric_value"]) >= 0 for row in reference_rows),
+                "detail": "reference metric values checked",
+            },
+            {
+                "check": "pipeline_snapshot_certification_status_values",
+                "path": str(log_path.as_posix()),
+                "passed": all(row["certification_status"] in {"staged_for_review", "certified", "rejected"} for row in log_rows),
+                "detail": "certification statuses checked",
+            },
+            {
+                "check": "pipeline_snapshot_certification_reference_fk",
+                "path": str(log_path.as_posix()),
+                "passed": {row["reference_snapshot_id"] for row in log_rows}.issubset(reference_snapshot_ids),
+                "detail": f"{len(reference_snapshot_ids)} reference snapshot ids",
+            },
+            {
+                "check": "pipeline_snapshot_certification_metric_count_matches",
+                "path": str(log_path.as_posix()),
+                "passed": all(int(row["metric_count"]) == sum(1 for reference in reference_rows if reference["snapshot_id"] == row["reference_snapshot_id"]) for row in log_rows),
+                "detail": "certification metric counts checked",
             },
         ]
     )
